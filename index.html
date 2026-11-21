@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#1d2b64">
+<title>Rocket Lander</title>
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:#0b1020;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#fff;-webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
+  #game{position:absolute;inset:0;width:100%;height:100%;display:block}
+  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(5,8,25,.25),rgba(5,8,25,.6));z-index:5}
+  .hidden{display:none!important}
+  .card{background:rgba(14,18,40,.82);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:26px 30px 22px;max-width:420px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#ffb36b;opacity:.9}
+  h1{margin:6px 0 4px;font-size:40px;letter-spacing:.04em;font-weight:800;background:linear-gradient(180deg,#fff 30%,#ffc98a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  h2{margin:2px 0 6px;font-size:30px;font-weight:800}
+  p{margin:8px 0;line-height:1.45;color:#d9def0;font-size:15px}
+  .small{font-size:13px;color:#aab3cf}
+  .keys{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;align-items:center;text-align:left;margin:14px auto 6px;max-width:300px;font-size:14px;color:#d9def0}
+  kbd{display:inline-block;min-width:24px;padding:2px 6px;margin:0 1px;border-radius:6px;background:#2a3157;border:1px solid #47508a;border-bottom-width:3px;font:600 12px/1.4 system-ui,sans-serif;color:#fff;text-align:center}
+  button{font-family:inherit}
+  .primary{margin-top:14px;padding:12px 34px;font-size:17px;font-weight:700;color:#1b1030;border:0;border-radius:999px;background:linear-gradient(180deg,#ffd38a,#ff8a4c);box-shadow:0 6px 20px rgba(255,138,76,.4);cursor:pointer;transition:transform .08s}
+  .primary:hover{transform:translateY(-1px)} .primary:active{transform:translateY(1px)}
+  .best{margin-top:12px;font-size:13px;color:#aab3cf}
+  .best b{color:#ffd38a}
+  table{margin:10px auto 0;border-collapse:collapse;font-size:14px;min-width:240px}
+  td{padding:3px 8px;color:#d9def0} td:last-child{text-align:right;font-variant-numeric:tabular-nums;color:#fff;font-weight:600}
+  tr.total td{border-top:1px solid rgba(255,255,255,.2);padding-top:7px;font-size:16px;color:#ffd38a}
+  .icon{position:absolute;top:10px;right:10px;z-index:6;width:42px;height:42px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(14,18,40,.55);color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0}
+  .icon:hover{background:rgba(30,36,70,.75)}
+  #touch{position:absolute;left:0;right:0;bottom:0;z-index:4;display:flex;justify-content:space-between;align-items:flex-end;padding:0 14px calc(14px + env(safe-area-inset-bottom));pointer-events:none}
+  #touch .tg{display:flex;gap:12px;pointer-events:auto}
+  #touch button{width:72px;height:72px;border-radius:50%;border:2px solid rgba(255,255,255,.35);background:rgba(14,18,40,.45);color:#fff;font-size:26px;font-weight:700;touch-action:none;-webkit-user-select:none;user-select:none}
+  #touch button.thrust{width:96px;height:96px;font-size:15px;letter-spacing:.06em;background:rgba(255,138,76,.35);border-color:rgba(255,200,140,.6)}
+  #touch button.on{background:rgba(255,255,255,.35)}
+  #touch button.thrust.on{background:rgba(255,160,90,.7)}
+  @media (max-height:520px){ .card{padding:16px 22px} h1{font-size:30px} .keys{margin:8px auto 2px} p{font-size:14px;margin:5px 0} }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Rocket Lander game"></canvas>
+<button id="mute" class="icon" aria-label="Toggle sound" title="Sound on/off (M)">🔇</button>
+
+<div id="startScreen" class="overlay">
+  <div class="card">
+    <div class="kicker">A tiny game by Nick Linthacum</div>
+    <h1>ROCKET LANDER</h1>
+    <p>Bring the booster home. Touch down upright and gently on the drone ship.</p>
+    <div class="keys">
+      <span><kbd>↑</kbd><kbd>W</kbd><kbd>Space</kbd></span><span>Fire engine (uses fuel)</span>
+      <span><kbd>←</kbd><kbd>→</kbd> <kbd>A</kbd><kbd>D</kbd></span><span>Rotate</span>
+    </div>
+    <p class="small">Land slower than 7 m/s, within 10° of upright, with both legs on the deck. Later levels bring less fuel, wind, and rolling seas.</p>
+    <button id="startBtn" class="primary">Start</button>
+    <div class="best">High score: <b id="bestStart">0</b></div>
+  </div>
+</div>
+
+<div id="resultScreen" class="overlay hidden">
+  <div class="card">
+    <h2 id="resTitle">Touchdown!</h2>
+    <p id="resMsg"></p>
+    <div id="resTable"></div>
+    <button id="resBtn" class="primary">Next level</button>
+    <div class="best" id="resBest"></div>
+  </div>
+</div>
+
+<div id="touch" class="hidden">
+  <div class="tg"><button data-k="left" aria-label="Rotate left">◀</button><button data-k="right" aria-label="Rotate right">▶</button></div>
+  <div class="tg"><button data-k="up" class="thrust" aria-label="Thrust">THRUST</button></div>
+</div>
+
+<script>
+(() => {
+'use strict';
+// ---------- constants (world units are "px"; displayed metres = px / 5) ----------
+const PX_PER_M = 5;
+const G = 30;            // gravity px/s^2
+const THRUST = 78;       // engine acceleration px/s^2
+const ROT = 2.3;         // rad/s
+const BURN = 12;         // fuel units per second
+const MAX_VY = 36, MAX_VX = 24, MAX_TILT = 10; // landing limits (px/s, px/s, degrees)
+let SEA_H = 90;          // ocean height from bottom (raised on touch screens)
+const DECK_H = 12;       // deck height above sea
+const LEG_LEN = 28, LEG_PIVOT_Y = 18, LEG_PIVOT_X = 7, LEG_DEPLOY = 35 * Math.PI / 180;
+const FOOT_Y = LEG_PIVOT_Y + LEG_LEN * Math.cos(LEG_DEPLOY); // ~40.9
+const DT = 1 / 120;
+const BEST_KEY = 'rocketLanderBest';
+
+const cv = document.getElementById('game'), ctx = cv.getContext('2d');
+const $ = id => document.getElementById(id);
+let VW = 1000, VH = 600, scale = 1, dpr = 1, seaY = 500, touchMode = false;
+
+const rand = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t * t * (3 - 2 * t);
+
+function loadBest() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch (e) { return 0; } }
+function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+
+const S = { mode: 'start', level: 1, total: 0, best: loadBest(), t: 0, levelT: 0, overlayAt: 0, reason: '', last: null, cfg: null, stepping: true };
+let R = null, ship = null, wind = 0, windBase = 0;
+const particles = [];
+const keys = { left: false, right: false, up: false };
+const touch = { left: false, right: false, up: false };
+
+// ---------- themes ----------
+const THEMES = [
+  { name: 'sunset', sky: ['#1d2b64', '#4b3a87', '#b8507c', '#f08a5d', '#ffd286'], sea: ['#45508a', '#0e1634'], sun: '#ffd27a', sunR: 46, sunY: 0.05, stars: 0.12, cloud: 'rgba(255,190,170,', haze: 'rgba(255,190,140,0.35)' },
+  { name: 'dusk',   sky: ['#0d1233', '#27286a', '#6b3a7d', '#d0647a', '#f59a7a'], sea: ['#323c78', '#0a1028'], sun: '#ff9a7a', sunR: 34, sunY: 0.012, stars: 0.55, cloud: 'rgba(230,150,180,', haze: 'rgba(240,130,140,0.3)' },
+  { name: 'night',  sky: ['#02040f', '#071230', '#13245a', '#22357a', '#2c4290'], sea: ['#1b2c5c', '#030817'], moon: true, sun: '#f2f4ff', sunR: 22, sunY: 0.45, stars: 1, cloud: 'rgba(160,180,230,', haze: 'rgba(120,150,230,0.18)' },
+];
+const stars = Array.from({ length: 170 }, () => ({ x: Math.random(), y: Math.random() * 0.8, r: Math.random() * 1.3 + 0.3, p: Math.random() * 6.28 }));
+const clouds = Array.from({ length: 6 }, (_, i) => ({ x: Math.random(), y: 0.12 + Math.random() * 0.45, w: 90 + Math.random() * 160, s: 3 + Math.random() * 6 }));
+
+// ---------- levels ----------
+function levelCfg(n) {
+  const feats = [];
+  const c = {
+    fuel: Math.max(50, 110 - (n - 1) * 8),
+    shipW: Math.max(88, 150 - (n - 1) * 8),
+    wind: n >= 2 ? Math.min(12, 3 + (n - 2) * 2) : 0,
+    gust: n >= 3 ? Math.min(8, 2 + (n - 3) * 1.5) : 0,
+    bob: n >= 2 ? Math.min(7, 2 + (n - 2) * 1.2) : 0,
+    drift: n >= 3 ? Math.min(150, 40 + (n - 3) * 25) : 0,
+    driftSpeed: 0.22 + n * 0.03,
+    vx0: 10 + n * 6,
+  };
+  if (c.wind) feats.push('wind');
+  if (c.bob) feats.push('rolling seas');
+  if (c.drift) feats.push('drifting ship');
+  if (n > 1) feats.push('less fuel');
+  c.feats = feats;
+  return c;
+}
+const theme = () => THEMES[Math.min(S.level - 1, 2)];
+
+// ---------- sizing ----------
+function resize() {
+  dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.max(1, window.innerWidth), h = Math.max(1, window.innerHeight);
+  cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+  VH = 600; scale = h / VH; VW = w / scale;
+  if (VW < 420) { scale = w / 420; VW = 420; VH = h / scale; }
+  SEA_H = touchMode ? Math.max(90, 130 / scale) : 90;
+  const oldSea = seaY; seaY = VH - SEA_H;
+  if (ship) { ship.baseX = clamp(ship.baseX, ship.w / 2 + 20, VW - ship.w / 2 - 20); }
+  if (R && !R.landed && oldSea) R.y += seaY - oldSea;
+}
+window.addEventListener('resize', resize);
+
+// ---------- ship ----------
+function makeShip(c) {
+  const w = c.shipW;
+  const drift = Math.max(0, Math.min(c.drift, VW / 2 - w / 2 - 40));
+  const room = Math.max(0, VW / 2 - w / 2 - 40 - drift);
+  ship = { w, drift, baseX: VW / 2 + rand(-1, 1) * room, bob: c.bob, ds: c.driftSpeed, phase: rand(0, 6.28), x: 0, y: 0, vx: 0, vy: 0 };
+  placeShip(0, true);
+}
+function placeShip(dt, init) {
+  const t = S.t;
+  const nx = clamp(ship.baseX + ship.drift * Math.sin(t * ship.ds + ship.phase), ship.w / 2 + 10, VW - ship.w / 2 - 10);
+  const ny = seaY - DECK_H + ship.bob * Math.sin(t * 1.4 + ship.phase);
+  if (!init && dt > 0) { ship.vx = (nx - ship.x) / dt; ship.vy = (ny - ship.y) / dt; }
+  ship.x = nx; ship.y = ny;
+}
+
+// ---------- rocket geometry ----------
+function legAngle(l) { return lerp(Math.PI, LEG_DEPLOY, ease(clamp(l, 0, 1))); }
+function local2world(lx, ly) {
+  const c = Math.cos(R.a), s = Math.sin(R.a);
+  return { x: R.x + lx * c - ly * s, y: R.y + lx * s + ly * c };
+}
+function footLocal(side) {
+  const th = legAngle(R.legs);
+  return { x: side * (LEG_PIVOT_X + LEG_LEN * Math.sin(th)), y: LEG_PIVOT_Y + LEG_LEN * Math.cos(th) };
+}
+function contactPoints() {
+  if (R.legs > 0.6) return [-1, 1].map(s => { const f = footLocal(s); return local2world(f.x, f.y); });
+  return [local2world(-7, 31), local2world(7, 31)];
+}
+function bodyPoints() { return [local2world(0, -44), local2world(-7, -44), local2world(7, -44), local2world(-7, 31), local2world(7, 31)]; }
+
+// ---------- game flow ----------
+function setDemo() {
+  S.mode = 'start'; S.level = 1; S.cfg = levelCfg(1);
+  makeShip(S.cfg); ship.baseX = Math.min(VW * 0.86, VW - ship.w / 2 - 20); placeShip(0, true);
+  R = { x: ship.x, y: ship.y - FOOT_Y, vx: 0, vy: 0, a: 0, fuel: 100, fuelMax: 100, legs: 1, thrust: false, alive: true, landed: true, relX: -8 };
+}
+function newGame() { S.level = 1; S.total = 0; startLevel(); }
+function startLevel() {
+  const c = S.cfg = levelCfg(S.level);
+  makeShip(c);
+  windBase = c.wind ? c.wind * (Math.random() < 0.5 ? -1 : 1) : 0; wind = windBase;
+  const wide = VW > 700;
+  R = { x: clamp(ship.x + rand(-1, 1) * Math.min(340, VW * 0.3), wide ? 210 : 40, wide ? VW - 160 : VW - 40), y: wide ? 100 : Math.max(170, VH * 0.18), vx: rand(-c.vx0, c.vx0), vy: rand(15, 30), a: rand(-0.15, 0.15),
+        fuel: c.fuel, fuelMax: c.fuel, legs: 0, thrust: false, alive: true, landed: false, relX: 0 };
+  particles.length = 0;
+  keys.left = keys.right = keys.up = false;
+  S.mode = 'play'; S.levelT = 0; S.overlayAt = 0; S.last = null;
+  $('startScreen').classList.add('hidden'); $('resultScreen').classList.add('hidden');
+  cv.focus && cv.focus();
+}
+function endRun(success, reason, info) {
+  S.mode = success ? 'landed' : 'crashed';
+  S.reason = reason; S.last = info || null;
+  S.overlayAt = S.t + (success ? 1.1 : 1.7);
+  if (success) Snd.chime(); else Snd.boom();
+}
+function showResult() {
+  S.overlayAt = 0;
+  const box = $('resultScreen');
+  if (S.mode === 'landed') {
+    const L = S.last;
+    S.total += L.total;
+    const newBest = S.total > S.best; if (newBest) { S.best = S.total; saveBest(S.best); }
+    $('resTitle').textContent = L.total >= 900 * L.mult ? 'Perfect landing!' : L.total >= 650 * L.mult ? 'Nice landing!' : 'Touchdown!';
+    $('resMsg').textContent = `Level ${S.level} complete. ${L.rvy.toFixed(1)} m/s at touchdown, ${L.off.toFixed(1)} m from center.`;
+    $('resTable').innerHTML = `<table>
+      <tr><td>Accuracy</td><td>${L.acc}</td></tr>
+      <tr><td>Softness</td><td>${L.soft}</td></tr>
+      <tr><td>Upright</td><td>${L.up}</td></tr>
+      <tr><td>Fuel left</td><td>${L.fuel}</td></tr>
+      <tr><td>Level bonus</td><td>×${L.mult.toFixed(2)}</td></tr>
+      <tr class="total"><td>Landing score</td><td>${L.total}</td></tr>
+      <tr><td>Run total</td><td>${S.total}</td></tr></table>`;
+    $('resBtn').textContent = `Level ${S.level + 1} →`;
+    $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
+  } else {
+    const newBest = S.total > 0 && S.total >= S.best;
+    $('resTitle').textContent = R.splash ? 'Splashdown 💦' : 'Kaboom! 💥';
+    $('resMsg').textContent = S.reason;
+    $('resTable').innerHTML = `<table><tr><td>Reached level</td><td>${S.level}</td></tr><tr class="total"><td>Final score</td><td>${S.total}</td></tr></table>`;
+    $('resBtn').textContent = 'Try again';
+    $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
+  }
+  box.classList.remove('hidden');
+}
+$('resBtn').addEventListener('click', () => {
+  Snd.unlock();
+  if (S.mode === 'landed') { S.level++; startLevel(); } else newGame();
+});
+$('startBtn').addEventListener('click', () => { Snd.unlock(); newGame(); });
+
+// ---------- simulation ----------
+function step(dt) {
+  S.t += dt; S.levelT += dt;
+  placeShip(dt);
+  if (S.cfg && S.cfg.gust) wind = windBase + S.cfg.gust * Math.sin(S.t * 0.7) * Math.sin(S.t * 0.23 + 1);
+  if (S.mode === 'play') updateRocket(dt);
+  else if (R && R.landed) { R.x = ship.x + R.relX; R.y = ship.y - FOOT_Y; R.vx = ship.vx; R.vy = ship.vy; R.a *= 0.9; R.thrust = false; }
+  updateParticles(dt);
+  Snd.setThrust(S.mode === 'play' && R && R.thrust);
+  if (S.overlayAt && S.t >= S.overlayAt) showResult();
+}
+
+function updateRocket(dt) {
+  const left = keys.left || touch.left, right = keys.right || touch.right, up = keys.up || touch.up;
+  R.a = clamp(R.a + ((right ? 1 : 0) - (left ? 1 : 0)) * ROT * dt, -Math.PI, Math.PI);
+  R.thrust = up && R.fuel > 0;
+  let ax = wind * (R.y < seaY ? 1 : 0), ay = G;
+  if (R.thrust) {
+    ax += THRUST * Math.sin(R.a); ay -= THRUST * Math.cos(R.a);
+    R.fuel = Math.max(0, R.fuel - BURN * dt);
+    emitFlame();
+  }
+  R.vx += ax * dt; R.vy += ay * dt;
+  R.x += R.vx * dt; R.y += R.vy * dt;
+  if (R.x < 16) { R.x = 16; R.vx = Math.max(0, R.vx); }
+  if (R.x > VW - 16) { R.x = VW - 16; R.vx = Math.min(0, R.vx); }
+  if (R.y < -400) { R.y = -400; R.vy = Math.max(0, R.vy); }
+  const alt = ship.y - (R.y + FOOT_Y);
+  if (alt < 170 || R.legs > 0) R.legs = Math.min(1, R.legs + dt * 1.7);
+
+  const L = ship.x - ship.w / 2, Rt = ship.x + ship.w / 2;
+  const onDeckX = p => p.x >= L && p.x <= Rt;
+  const pts = contactPoints();
+  const footHit = pts.some(p => p.y >= ship.y && onDeckX(p) && p.y < ship.y + 14);
+  const body = bodyPoints();
+  const bodyDeck = body.some(p => p.y >= ship.y && onDeckX(p) && p.y < ship.y + 20);
+  const water = pts.concat(body).some(p => p.y >= seaY + 3);
+
+  if (footHit) evaluateTouchdown(pts);
+  else if (bodyDeck) crash(R.legs < 0.6 ? 'Touched down before the landing legs deployed.' : 'The booster hit the deck on its side.');
+  else if (water) splash();
+}
+
+function evaluateTouchdown(feet) {
+  const rvx = R.vx - ship.vx, rvy = R.vy - ship.vy, tilt = Math.abs(R.a) * 180 / Math.PI;
+  const L = ship.x - ship.w / 2, Rt = ship.x + ship.w / 2;
+  const both = feet.every(p => p.x >= L - 1 && p.x <= Rt + 1);
+  let reason = '';
+  if (!both) reason = 'One leg missed the edge of the deck.';
+  else if (rvy > MAX_VY) reason = `Too fast: hit the deck at ${(rvy / PX_PER_M).toFixed(1)} m/s (limit ${(MAX_VY / PX_PER_M).toFixed(1)}).`;
+  else if (Math.abs(rvx) > MAX_VX) reason = `Sliding sideways at ${(Math.abs(rvx) / PX_PER_M).toFixed(1)} m/s (limit ${(MAX_VX / PX_PER_M).toFixed(1)}).`;
+  else if (tilt > MAX_TILT) reason = `Too tilted: ${tilt.toFixed(0)}° (limit ${MAX_TILT}°). It tipped over.`;
+  if (reason) return crash(reason);
+  // success
+  R.landed = true; R.thrust = false; R.relX = R.x - ship.x; R.y = ship.y - FOOT_Y;
+  const half = ship.w / 2;
+  const accF = 1 - Math.min(1, Math.abs(R.relX) / half);
+  const softF = 1 - Math.max(0, rvy) / MAX_VY;
+  const upF = 1 - tilt / MAX_TILT;
+  const fuelF = R.fuel / R.fuelMax;
+  const mult = 1 + (S.level - 1) * 0.25;
+  const info = { acc: Math.round(accF * 400), soft: Math.round(softF * 250), up: Math.round(upF * 100), fuel: Math.round(fuelF * 250), mult,
+                 rvy: Math.max(0, rvy) / PX_PER_M, off: Math.abs(R.relX) / PX_PER_M };
+  info.total = Math.round((info.acc + info.soft + info.up + info.fuel) * mult);
+  for (let i = 0; i < 40; i++) {
+    const s = Math.random() < 0.5 ? -1 : 1;
+    particles.push({ t: 'smoke', x: R.x + s * rand(0, 20), y: ship.y - 2, vx: s * rand(30, 110), vy: rand(-25, -5), life: rand(0.8, 1.6), max: 1.6, size: rand(4, 9) });
+  }
+  endRun(true, '', info);
+}
+
+function crash(reason) {
+  R.alive = false; R.thrust = false;
+  const cx = R.x, cy = R.y + 10;
+  for (let i = 0; i < 140; i++) {
+    const a = rand(0, 6.28), sp = rand(30, 320) * Math.pow(Math.random(), 0.5);
+    particles.push({ t: 'fire', x: cx, y: cy, vx: Math.cos(a) * sp + R.vx * 0.3, vy: Math.sin(a) * sp - 40, life: rand(0.5, 1.3), max: 1.3, size: rand(3, 8) });
+  }
+  for (let i = 0; i < 45; i++) {
+    const a = rand(0, 6.28), sp = rand(10, 90);
+    particles.push({ t: 'smoke', x: cx + rand(-10, 10), y: cy + rand(-10, 10), vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: rand(1.5, 3), max: 3, size: rand(8, 18) });
+  }
+  for (let i = 0; i < 18; i++) {
+    const a = rand(3.4, 6.0), sp = rand(80, 260);
+    particles.push({ t: 'debris', x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: rand(1.5, 2.6), max: 2.6, size: rand(3, 7), rot: rand(0, 6), vr: rand(-10, 10), c: Math.random() < 0.6 ? '#e8ebf0' : '#2a2d33' });
+  }
+  particles.push({ t: 'ring', x: cx, y: cy, vx: 0, vy: 0, life: 0.6, max: 0.6, size: 10 });
+  endRun(false, reason);
+}
+function splash() {
+  R.splash = true;
+  const cx = R.x;
+  for (let i = 0; i < 90; i++) particles.push({ t: 'drop', x: cx + rand(-12, 12), y: seaY, vx: rand(-90, 90), vy: rand(-260, -60), life: rand(0.8, 1.6), max: 1.6, size: rand(1.5, 3.5) });
+  crash(`Missed the drone ship by ${(Math.max(0, Math.abs(R.x - ship.x) - ship.w / 2) / PX_PER_M).toFixed(1)} m and went into the ocean.`);
+}
+
+function emitFlame() {
+  const n = local2world(0, 31);
+  const dx = -Math.sin(R.a), dy = Math.cos(R.a);
+  for (let i = 0; i < 3; i++) {
+    const sp = rand(170, 260), sd = rand(-22, 22);
+    particles.push({ t: 'flame', x: n.x + rand(-2, 2), y: n.y + rand(-2, 2), vx: R.vx + dx * sp - dy * sd, vy: R.vy + dy * sp + dx * sd, life: rand(0.22, 0.42), max: 0.42, size: rand(2.5, 4.5) });
+  }
+  const alt = ship.y - (R.y + FOOT_Y);
+  if (Math.random() < (alt < 120 ? 0.55 : 0.12)) {
+    particles.push({ t: 'smoke', x: n.x, y: n.y + 6, vx: R.vx * 0.5 + dx * 60 + rand(-15, 15), vy: R.vy * 0.5 + dy * 60, life: rand(0.8, 1.6), max: 1.6, size: rand(4, 8) });
+  }
+}
+
+function updateParticles(dt) {
+  const L = ship.x - ship.w / 2, Rt = ship.x + ship.w / 2;
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    switch (p.t) {
+      case 'flame': p.vx *= 0.985; p.vy *= 0.985; break;
+      case 'smoke': p.vx *= 0.97; p.vy = p.vy * 0.97 - 12 * dt; p.vx += wind * dt * 0.6; p.size += dt * 9; break;
+      case 'fire': p.vx *= 0.96; p.vy = p.vy * 0.96 + 20 * dt; break;
+      case 'debris': p.vy += 220 * dt; p.rot += p.vr * dt; if (p.y > seaY + 4) { p.vx *= 0.8; p.vy = Math.min(p.vy, 20); } break;
+      case 'drop': p.vy += 400 * dt; if (p.y > seaY + 6 && p.vy > 0) p.life = 0; break;
+      case 'ring': p.size += 360 * dt; break;
+    }
+    p.x += p.vx * dt; p.y += p.vy * dt;
+    if (p.t === 'flame' || p.t === 'smoke') {
+      const onDeck = p.x > L && p.x < Rt && p.y > ship.y && p.y < ship.y + 10;
+      if ((onDeck || p.y > seaY) && p.vy > 0) {
+        p.y = onDeck ? ship.y : seaY; p.vy *= -0.12;
+        p.vx += (p.x < (R ? R.x : p.x) ? -1 : 1) * rand(90, 190);
+      }
+    }
+  }
+  if (particles.length > 1400) particles.splice(0, particles.length - 1400);
+}
+
+// ---------- rendering ----------
+function render() {
+  ctx.setTransform(dpr * scale, 0, 0, dpr * scale, 0, 0);
+  const th = theme();
+  drawSky(th);
+  drawOceanBack(th);
+  drawShip();
+  drawParticles(false);
+  if (R && R.alive) drawRocket();
+  drawParticles(true);
+  drawOceanFront(th);
+  if (S.mode === 'play' || S.mode === 'landed' || S.mode === 'crashed') drawHUD();
+}
+
+function drawSky(th) {
+  const g = ctx.createLinearGradient(0, 0, 0, seaY);
+  th.sky.forEach((c, i) => g.addColorStop(i / (th.sky.length - 1), c));
+  ctx.fillStyle = g; ctx.fillRect(0, 0, VW, seaY + 2);
+  // stars
+  if (th.stars > 0) {
+    for (const s of stars) {
+      const a = th.stars * (0.55 + 0.45 * Math.sin(S.t * 2 + s.p)) * (1 - s.y / 0.9);
+      if (a <= 0.02) continue;
+      ctx.fillStyle = `rgba(255,255,255,${a.toFixed(3)})`;
+      ctx.fillRect(s.x * VW, s.y * seaY, s.r, s.r);
+    }
+  }
+  // sun / moon
+  const sx = VW * 0.7, sy = th.moon ? seaY * 0.22 : seaY - th.sunR * 0.55 - seaY * th.sunY;
+  const glow = ctx.createRadialGradient(sx, sy, th.sunR * 0.3, sx, sy, th.sunR * 5);
+  glow.addColorStop(0, th.moon ? 'rgba(220,230,255,0.35)' : 'rgba(255,220,150,0.55)');
+  glow.addColorStop(1, 'rgba(255,200,150,0)');
+  ctx.fillStyle = glow; ctx.fillRect(sx - th.sunR * 5, sy - th.sunR * 5, th.sunR * 10, th.sunR * 10);
+  ctx.fillStyle = th.sun; ctx.beginPath(); ctx.arc(sx, sy, th.sunR, 0, 7); ctx.fill();
+  if (th.moon) { ctx.fillStyle = 'rgba(180,190,220,0.35)'; ctx.beginPath(); ctx.arc(sx - 6, sy - 4, 5, 0, 7); ctx.arc(sx + 7, sy + 6, 3.5, 0, 7); ctx.fill(); }
+  // clouds
+  for (const c of clouds) {
+    const x = ((c.x * (VW + 400) + S.t * c.s) % (VW + 400)) - 200, y = c.y * seaY;
+    ctx.fillStyle = th.cloud + '0.16)';
+    ctx.beginPath();
+    ctx.ellipse(x, y, c.w * 0.5, 9, 0, 0, 7);
+    ctx.ellipse(x + c.w * 0.18, y - 6, c.w * 0.28, 9, 0, 0, 7);
+    ctx.ellipse(x - c.w * 0.2, y - 3, c.w * 0.22, 7, 0, 0, 7);
+    ctx.fill();
+  }
+  // horizon haze
+  const hz = ctx.createLinearGradient(0, seaY - 60, 0, seaY);
+  hz.addColorStop(0, 'rgba(0,0,0,0)'); hz.addColorStop(1, th.haze);
+  ctx.fillStyle = hz; ctx.fillRect(0, seaY - 60, VW, 60);
+}
+
+function drawOceanBack(th) {
+  const g = ctx.createLinearGradient(0, seaY, 0, VH);
+  g.addColorStop(0, th.sea[0]); g.addColorStop(1, th.sea[1]);
+  ctx.fillStyle = g; ctx.fillRect(0, seaY, VW, VH - seaY);
+  // reflection column of the sun/moon
+  const sx = VW * 0.7;
+  for (let i = 0; i < 16; i++) {
+    const y = seaY + 3 + i * i * 0.36 + i * 3;
+    if (y > VH) break;
+    const w = (th.sunR * 1.2) * (1 - i / 22) * (0.6 + 0.4 * Math.sin(S.t * 3 + i * 1.7));
+    ctx.fillStyle = th.moon ? `rgba(230,236,255,${0.28 - i * 0.014})` : `rgba(255,214,140,${0.45 - i * 0.022})`;
+    ctx.fillRect(sx - w + Math.sin(S.t * 1.3 + i) * 6, y, w * 2, 1.6);
+  }
+}
+
+function wavePath(y0, amp, len, speed, phase) {
+  ctx.beginPath(); ctx.moveTo(0, VH + 2); ctx.lineTo(0, y0);
+  for (let x = 0; x <= VW + 10; x += 10) {
+    const y = y0 + Math.sin(x / len + S.t * speed + phase) * amp + Math.sin(x / (len * 0.43) - S.t * speed * 1.3) * amp * 0.4;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(VW + 10, VH + 2); ctx.closePath();
+}
+function drawOceanFront(th) {
+  // front band hides the submerged hull
+  const g = ctx.createLinearGradient(0, seaY, 0, VH);
+  g.addColorStop(0, th.sea[0]); g.addColorStop(1, th.sea[1]);
+  ctx.globalAlpha = 0.92; ctx.fillStyle = g;
+  wavePath(seaY + 3, 1.6, 26, 1.6, 0); ctx.fill();
+  ctx.globalAlpha = 1;
+  // wave highlight lines
+  ctx.lineWidth = 1.2;
+  for (let i = 0; i < 8; i++) {
+    const y0 = seaY + 4 + i * i * 1.25 + i * 7;
+    if (y0 > VH) break;
+    const amp = 1 + i * 0.55, len = 18 + i * 6, sp = 1.2 + i * 0.12;
+    ctx.strokeStyle = `rgba(255,255,255,${(0.07 + i * 0.012).toFixed(3)})`;
+    ctx.beginPath();
+    for (let x = -10; x <= VW + 10; x += 6) {
+      const y = y0 + Math.sin(x / len + S.t * sp + i * 1.9) * amp;
+      x < -5 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+}
+
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+function drawShip() {
+  if (!ship) return;
+  const x = ship.x, y = ship.y, w = ship.w, half = w / 2;
+  ctx.save(); ctx.translate(x, y);
+  // hull
+  ctx.fillStyle = '#1c2029';
+  ctx.beginPath(); ctx.moveTo(-half - 6, 0); ctx.lineTo(half + 6, 0); ctx.lineTo(half, 30); ctx.lineTo(-half, 30); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#2b313d'; ctx.fillRect(-half - 6, 3, w + 12, 4);
+  // side blocks (thruster housings / containers)
+  ctx.fillStyle = '#353c4a';
+  ctx.fillRect(-half - 4, -10, 12, 10); ctx.fillRect(half - 8, -10, 12, 10);
+  ctx.fillStyle = '#4a5265';
+  ctx.fillRect(-half - 4, -10, 12, 2); ctx.fillRect(half - 8, -10, 12, 2);
+  // deck
+  ctx.fillStyle = '#525b6e'; ctx.fillRect(-half, -2, w, 3);
+  ctx.fillStyle = '#3d4555'; ctx.fillRect(-half, 1, w, 2);
+  // hazard stripes at deck ends
+  ctx.save(); ctx.beginPath(); ctx.rect(-half, -2, 14, 3); ctx.rect(half - 14, -2, 14, 3); ctx.clip();
+  for (let i = -half - 10; i < half + 10; i += 6) { ctx.fillStyle = '#f2c230'; ctx.beginPath(); ctx.moveTo(i, 1); ctx.lineTo(i + 3, -2); ctx.lineTo(i + 6, -2); ctx.lineTo(i + 3, 1); ctx.fill(); }
+  ctx.restore();
+  // landing target (ellipse seen at a shallow angle)
+  ctx.strokeStyle = 'rgba(255,236,170,0.85)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.ellipse(0, -0.5, Math.min(26, half * 0.4), 1.6, 0, 0, 7); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,236,170,0.9)'; ctx.fillRect(-2, -1.5, 4, 2);
+  // mast lights
+  const blink = (Math.sin(S.t * 4) > 0.3) ? 1 : 0.25;
+  for (const sx of [-half + 2, half - 2]) {
+    ctx.fillStyle = '#5a6275'; ctx.fillRect(sx - 0.6, -16, 1.2, 6);
+    ctx.fillStyle = `rgba(255,70,60,${blink})`; ctx.beginPath(); ctx.arc(sx, -17, 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = `rgba(255,70,60,${0.25 * blink})`; ctx.beginPath(); ctx.arc(sx, -17, 6, 0, 7); ctx.fill();
+  }
+  // floodlight glow on deck at night-ish levels
+  if (S.level >= 2) {
+    const fl = ctx.createRadialGradient(0, -2, 2, 0, -2, half);
+    fl.addColorStop(0, 'rgba(255,240,200,0.18)'); fl.addColorStop(1, 'rgba(255,240,200,0)');
+    ctx.fillStyle = fl; ctx.fillRect(-half, -30, w, 30);
+  }
+  ctx.restore();
+}
+
+function drawRocket() {
+  ctx.save(); ctx.translate(R.x, R.y); ctx.rotate(R.a);
+  // core flame
+  if (R.thrust) {
+    const len = 30 + Math.random() * 14;
+    ctx.globalCompositeOperation = 'lighter';
+    const fg = ctx.createLinearGradient(0, 31, 0, 31 + len);
+    fg.addColorStop(0, 'rgba(255,255,235,0.95)'); fg.addColorStop(0.35, 'rgba(255,200,90,0.8)'); fg.addColorStop(1, 'rgba(255,90,30,0)');
+    ctx.fillStyle = fg;
+    ctx.beginPath(); ctx.moveTo(-5, 31); ctx.quadraticCurveTo(-7, 31 + len * 0.4, 0, 31 + len); ctx.quadraticCurveTo(7, 31 + len * 0.4, 5, 31); ctx.closePath(); ctx.fill();
+    const gl = ctx.createRadialGradient(0, 36, 1, 0, 36, 30);
+    gl.addColorStop(0, 'rgba(255,190,100,0.55)'); gl.addColorStop(1, 'rgba(255,120,40,0)');
+    ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(0, 36, 30, 0, 7); ctx.fill();
+    ctx.globalCompositeOperation = 'source-over';
+  }
+  // legs
+  const th = legAngle(R.legs);
+  ctx.lineCap = 'round';
+  for (const s of [-1, 1]) {
+    const px = s * LEG_PIVOT_X, py = LEG_PIVOT_Y;
+    const fx = px + s * LEG_LEN * Math.sin(th), fy = py + LEG_LEN * Math.cos(th);
+    if (R.legs > 0.05) { // strut
+      const mx = (px + fx) / 2, my = (py + fy) / 2;
+      ctx.strokeStyle = '#30343c'; ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(s * 6.5, 4); ctx.lineTo(mx, my); ctx.stroke();
+    }
+    ctx.strokeStyle = '#1b1d22'; ctx.lineWidth = 3.2;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(fx, fy); ctx.stroke();
+    if (R.legs > 0.5) { ctx.lineWidth = 2.4; ctx.beginPath(); ctx.moveTo(fx - 3, fy); ctx.lineTo(fx + 3, fy); ctx.stroke(); }
+  }
+  // engine bell
+  ctx.fillStyle = '#3c4048';
+  ctx.beginPath(); ctx.moveTo(-5, 25); ctx.lineTo(5, 25); ctx.lineTo(7, 31); ctx.lineTo(-7, 31); ctx.closePath(); ctx.fill();
+  // body
+  const bg = ctx.createLinearGradient(-7, 0, 7, 0);
+  bg.addColorStop(0, '#b9bfc9'); bg.addColorStop(0.35, '#ffffff'); bg.addColorStop(0.7, '#e3e6ec'); bg.addColorStop(1, '#8e95a2');
+  ctx.fillStyle = bg; roundRect(-7, -44, 14, 70, 2.5); ctx.fill();
+  // soot from re-entry
+  const sg = ctx.createLinearGradient(0, -6, 0, 26);
+  sg.addColorStop(0, 'rgba(70,58,50,0)'); sg.addColorStop(1, 'rgba(70,58,50,0.55)');
+  ctx.fillStyle = sg; ctx.fillRect(-7, -6, 14, 32);
+  // panel lines
+  ctx.strokeStyle = 'rgba(80,90,105,0.35)'; ctx.lineWidth = 0.6;
+  for (const yy of [-18, 4]) { ctx.beginPath(); ctx.moveTo(-7, yy); ctx.lineTo(7, yy); ctx.stroke(); }
+  // engine section and interstage
+  ctx.fillStyle = '#2b2e35'; ctx.fillRect(-7, 21, 14, 5);
+  ctx.fillStyle = '#23262d'; roundRect(-7, -44, 14, 11, 2.5); ctx.fill();
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(-4, -44, 2, 11);
+  // grid fins
+  ctx.fillStyle = '#3a3e47';
+  ctx.fillRect(-12, -41, 5, 4); ctx.fillRect(7, -41, 5, 4);
+  ctx.strokeStyle = '#6a707c'; ctx.lineWidth = 0.5;
+  for (const gx of [-12, 7]) { ctx.strokeRect(gx, -41, 5, 4); ctx.beginPath(); ctx.moveTo(gx + 2.5, -41); ctx.lineTo(gx + 2.5, -37); ctx.stroke(); }
+  // little accent stripe
+  ctx.fillStyle = '#ff8a4c'; ctx.fillRect(-7, -31, 14, 1.4);
+  ctx.restore();
+  // off-screen indicator
+  if (R.y < -10) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)';
+    ctx.beginPath(); ctx.moveTo(R.x, 6); ctx.lineTo(R.x - 6, 16); ctx.lineTo(R.x + 6, 16); ctx.fill();
+    ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(`${Math.round((-R.y) / PX_PER_M)} m above`, R.x, 30);
+  }
+}
+
+function drawParticles(front) {
+  for (const p of particles) {
+    const f = p.life / p.max;
+    if (front !== (p.t === 'flame' || p.t === 'fire' || p.t === 'ring')) continue;
+    if (p.t === 'flame' || p.t === 'fire') {
+      ctx.globalCompositeOperation = 'lighter';
+      let c = f > 0.7 ? '255,246,210' : f > 0.45 ? '255,195,80' : f > 0.2 ? '255,120,40' : '170,50,40';
+      ctx.fillStyle = `rgba(${c},${Math.min(1, f * 1.4).toFixed(3)})`;
+      const s = p.size * (p.t === 'fire' ? (0.6 + (1 - f) * 1.8) : (0.7 + (1 - f) * 1.6));
+      ctx.beginPath(); ctx.arc(p.x, p.y, s, 0, 7); ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+    } else if (p.t === 'smoke') {
+      ctx.fillStyle = `rgba(200,200,212,${(f * 0.22).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill();
+    } else if (p.t === 'debris') {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.globalAlpha = Math.min(1, f * 2);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2); ctx.restore(); ctx.globalAlpha = 1;
+    } else if (p.t === 'drop') {
+      ctx.fillStyle = `rgba(220,240,255,${Math.min(1, f * 1.5).toFixed(3)})`;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.fill();
+    } else if (p.t === 'ring') {
+      ctx.strokeStyle = `rgba(255,230,190,${(f * 0.8).toFixed(3)})`; ctx.lineWidth = 3 * f + 0.5;
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.stroke();
+    }
+  }
+}
+
+function hudPanel(x, y, w, h) {
+  ctx.fillStyle = 'rgba(10,14,32,0.55)'; roundRect(x, y, w, h, 10); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth = 1; ctx.stroke();
+}
+function drawHUD() {
+  if (!R) return;
+  const alt = Math.max(0, ship.y - (R.y + FOOT_Y)) / PX_PER_M;
+  const rvy = (R.vy - (R.landed ? ship.vy : 0)), rvx = R.vx - (R.landed ? ship.vx : 0);
+  const tilt = R.a * 180 / Math.PI;
+  const ok = '#7dffa8', warn = '#ff6b6b', txt = '#e8ecff';
+  ctx.textBaseline = 'middle';
+  // left panel
+  const x = 12, y = 12, w = 178, lh = 19;
+  hudPanel(x, y, w, 128);
+  const rows = [
+    ['ALT', `${alt.toFixed(0)} m`, txt],
+    ['V SPEED', `${rvy > 0 ? '↓' : '↑'} ${(Math.abs(rvy) / PX_PER_M).toFixed(1)} m/s`, rvy <= MAX_VY ? ok : warn],
+    ['H SPEED', `${rvx >= 0 ? '→' : '←'} ${(Math.abs(rvx) / PX_PER_M).toFixed(1)} m/s`, Math.abs(rvx) <= MAX_VX ? ok : warn],
+    ['TILT', `${tilt >= 0 ? '' : '-'}${Math.abs(tilt).toFixed(0)}°`, Math.abs(tilt) <= MAX_TILT ? ok : warn],
+  ];
+  rows.forEach((r, i) => {
+    const yy = y + 16 + i * lh;
+    ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.75)'; ctx.fillText(r[0], x + 12, yy);
+    ctx.font = '700 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; ctx.textAlign = 'right'; ctx.fillStyle = r[2]; ctx.fillText(r[1], x + w - 12, yy);
+  });
+  // fuel bar
+  const fy = y + 16 + 4 * lh + 4, ff = R.fuel / R.fuelMax;
+  ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.75)'; ctx.fillText('FUEL', x + 12, fy);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; roundRect(x + 52, fy - 5, w - 64, 10, 5); ctx.fill();
+  const fc = ff > 0.4 ? '#7dffa8' : ff > 0.18 ? '#ffd166' : '#ff6b6b';
+  if (ff > 0) { ctx.fillStyle = fc; roundRect(x + 52, fy - 5, Math.max(10, (w - 64) * ff), 10, 5); ctx.fill(); }
+  ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillStyle = 'rgba(200,210,240,0.7)';
+  ctx.fillText(R.fuel <= 0 ? 'EMPTY' : `${Math.round(ff * 100)}%`, x + w - 12, fy + 14);
+
+  // right panel
+  const rw = 132, rx = VW - rw - 12, ry = 12 + 52 / scale;
+  hudPanel(rx, ry, rw, 70);
+  const rr = [['LEVEL', String(S.level)], ['SCORE', String(S.total)], ['BEST', String(Math.max(S.best, S.total))]];
+  rr.forEach((r, i) => {
+    const yy = ry + 15 + i * 20;
+    ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.75)'; ctx.fillText(r[0], rx + 12, yy);
+    ctx.font = '700 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; ctx.textAlign = 'right'; ctx.fillStyle = i === 2 ? '#ffd38a' : txt; ctx.fillText(r[1], rx + rw - 12, yy);
+  });
+  // wind
+  if (Math.abs(wind) > 0.5) {
+    const cx = VW / 2, cy = 26, ws = wind / PX_PER_M;
+    hudPanel(cx - 62, 12, 124, 28);
+    ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.8)'; ctx.fillText('WIND', cx - 52, cy);
+    const len = clamp(Math.abs(ws) * 6, 8, 34), dir = Math.sign(ws);
+    const ax0 = cx + 18 - dir * len / 2, ax1 = cx + 18 + dir * len / 2;
+    ctx.strokeStyle = '#9fd3ff'; ctx.fillStyle = '#9fd3ff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ax0, cy); ctx.lineTo(ax1, cy); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(ax1 + dir * 5, cy); ctx.lineTo(ax1 - dir * 2, cy - 5); ctx.lineTo(ax1 - dir * 2, cy + 5); ctx.fill();
+    ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillText(Math.abs(ws).toFixed(1), cx + 58, cy);
+  }
+  // level banner
+  if (S.mode === 'play' && S.levelT < 2.6) {
+    const a = Math.min(1, S.levelT * 3, (2.6 - S.levelT) * 2);
+    ctx.globalAlpha = a; ctx.textAlign = 'center';
+    ctx.font = '800 34px system-ui,sans-serif'; ctx.fillStyle = '#fff';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 12;
+    ctx.fillText(`LEVEL ${S.level}`, VW / 2, VH * 0.36);
+    ctx.font = '600 15px system-ui,sans-serif'; ctx.fillStyle = '#ffd38a';
+    const f = S.cfg.feats.length ? 'New: ' + S.cfg.feats.join(' · ') : 'Land on the drone ship';
+    ctx.fillText(f, VW / 2, VH * 0.36 + 30);
+    ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+  }
+  if (S.mode === 'play' && R.fuel <= 0 && Math.sin(S.t * 8) > 0) {
+    ctx.textAlign = 'center'; ctx.font = '700 16px system-ui,sans-serif'; ctx.fillStyle = '#ff6b6b'; ctx.fillText('OUT OF FUEL', VW / 2, 60);
+  }
+}
+
+// ---------- sound (off by default) ----------
+const Snd = {
+  on: false, ac: null, master: null, engG: null, lastThrust: null,
+  ensure() {
+    if (this.ac) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    const ac = this.ac = new AC();
+    this.master = ac.createGain(); this.master.gain.value = 0.45; this.master.connect(ac.destination);
+    const len = ac.sampleRate * 2, buf = ac.createBuffer(1, len, ac.sampleRate), d = buf.getChannelData(0);
+    let last = 0; for (let i = 0; i < len; i++) { const wn = Math.random() * 2 - 1; last = (last + 0.02 * wn) / 1.02; d[i] = last * 3.5; }
+    this.noise = buf;
+    const src = ac.createBufferSource(); src.buffer = buf; src.loop = true;
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 650;
+    this.engG = ac.createGain(); this.engG.gain.value = 0;
+    src.connect(f); f.connect(this.engG); this.engG.connect(this.master); src.start();
+  },
+  unlock() { if (this.on && this.ac && this.ac.state === 'suspended') this.ac.resume(); },
+  setThrust(on) {
+    on = !!(on && this.on);
+    if (!this.ac || on === this.lastThrust) return;
+    this.lastThrust = on;
+    this.engG.gain.setTargetAtTime(on ? 1.1 : 0, this.ac.currentTime, 0.05);
+  },
+  boom() {
+    if (!this.on || !this.ac) return;
+    const ac = this.ac, t = ac.currentTime, s = ac.createBufferSource(); s.buffer = this.noise;
+    const f = ac.createBiquadFilter(); f.type = 'lowpass'; f.frequency.setValueAtTime(2000, t); f.frequency.exponentialRampToValueAtTime(70, t + 1.6);
+    const g = ac.createGain(); g.gain.setValueAtTime(2.2, t); g.gain.exponentialRampToValueAtTime(0.001, t + 1.9);
+    s.connect(f); f.connect(g); g.connect(this.master); s.start(t); s.stop(t + 2);
+  },
+  chime() {
+    if (!this.on || !this.ac) return;
+    const ac = this.ac, t0 = ac.currentTime;
+    [523.25, 659.25, 783.99, 1046.5].forEach((fr, i) => {
+      const o = ac.createOscillator(), g = ac.createGain(), t = t0 + i * 0.11;
+      o.type = 'triangle'; o.frequency.value = fr;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+      o.connect(g); g.connect(this.master); o.start(t); o.stop(t + 0.5);
+    });
+  },
+  toggle() {
+    this.on = !this.on;
+    if (this.on) { this.ensure(); if (this.ac && this.ac.state === 'suspended') this.ac.resume(); }
+    this.lastThrust = null; this.setThrust(false);
+    const b = $('mute'); b.textContent = this.on ? '🔊' : '🔇'; b.setAttribute('aria-pressed', String(this.on));
+  },
+};
+$('mute').addEventListener('click', e => { Snd.toggle(); e.currentTarget.blur(); });
+
+// ---------- input ----------
+const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', Space: 'up' };
+function overlayButton() {
+  if (!$('startScreen').classList.contains('hidden')) return $('startBtn');
+  if (!$('resultScreen').classList.contains('hidden')) return $('resBtn');
+  return null;
+}
+window.addEventListener('keydown', e => {
+  if (e.code === 'KeyM') { Snd.toggle(); return; }
+  const btn = overlayButton();
+  if (btn && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); if (!e.repeat) btn.click(); return; }
+  const k = KEYMAP[e.code];
+  if (k) { e.preventDefault(); if (!e.repeat || keys[k]) keys[k] = true; }
+});
+window.addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) { keys[k] = false; e.preventDefault(); } });
+window.addEventListener('blur', () => { keys.left = keys.right = keys.up = false; touch.left = touch.right = touch.up = false; });
+
+function showTouch() { $('touch').classList.remove('hidden'); if (!touchMode) { touchMode = true; resize(); } }
+if ('ontouchstart' in window || (window.matchMedia && matchMedia('(pointer: coarse)').matches)) showTouch();
+window.addEventListener('touchstart', showTouch, { once: true, passive: true });
+document.querySelectorAll('#touch button').forEach(b => {
+  const k = b.dataset.k;
+  const on = e => { e.preventDefault(); touch[k] = true; b.classList.add('on'); try { b.setPointerCapture(e.pointerId); } catch (_) {} Snd.unlock(); };
+  const off = e => { e.preventDefault(); touch[k] = false; b.classList.remove('on'); };
+  b.addEventListener('pointerdown', on);
+  b.addEventListener('pointerup', off); b.addEventListener('pointercancel', off); b.addEventListener('lostpointercapture', off);
+  b.addEventListener('contextmenu', e => e.preventDefault());
+});
+
+// ---------- loop ----------
+let lastT = performance.now(), acc = 0;
+function frame(now) {
+  const d = Math.min(0.05, (now - lastT) / 1000); lastT = now;
+  if (S.stepping) { acc += d; while (acc >= DT) { step(DT); acc -= DT; } }
+  render();
+  requestAnimationFrame(frame);
+}
+
+resize();
+setDemo();
+$('bestStart').textContent = S.best;
+requestAnimationFrame(frame);
+
+// ---------- tiny debug/test hook (harmless; used by automated tests) ----------
+window.RocketLander = {
+  state: () => ({ mode: S.mode, level: S.level, total: S.total, best: S.best, reason: S.reason, last: S.last,
+                  rocket: R && { x: R.x, y: R.y, vx: R.vx, vy: R.vy, a: R.a, fuel: R.fuel, legs: R.legs, alive: R.alive, landed: R.landed },
+                  ship: ship && { x: ship.x, y: ship.y, w: ship.w, vx: ship.vx, vy: ship.vy }, wind,
+                  overlay: overlayButton() ? overlayButton().id : null, keys: { ...keys } }),
+  start: (level) => { S.level = level || 1; S.total = 0; startLevel(); },
+  setRocket: (o) => Object.assign(R, o),
+  setStepping: (on) => { S.stepping = !!on; },
+  step: (n) => { for (let i = 0; i < (n || 1); i++) step(DT); render(); },
+  constants: { G, THRUST, MAX_VY, MAX_VX, MAX_TILT, FOOT_Y, PX_PER_M },
+};
+})();
+</script>
+</body>
+</html>
