@@ -57,7 +57,8 @@
   #touch button.thrust{width:96px;height:96px;font-size:15px;letter-spacing:.06em;background:rgba(255,138,76,.35);border-color:rgba(255,200,140,.6)}
   #touch button.on{background:rgba(255,255,255,.35)}
   #touch button.thrust.on{background:rgba(255,160,90,.7)}
-  @media (max-height:520px){ .card{padding:16px 22px} h1{font-size:30px} .keys{margin:8px auto 2px} p{font-size:14px;margin:5px 0} .lb td,.lb th{padding:3px 4px} }
+  .nick-badge{width:76px;height:76px;display:block;margin:0 auto 2px;pointer-events:none;background:transparent}
+  @media (max-height:520px){ .card{padding:16px 22px} h1{font-size:30px} .keys{margin:8px auto 2px} p{font-size:14px;margin:5px 0} .lb td,.lb th{padding:3px 4px} .nick-badge{width:48px;height:48px} }
 </style>
 </head>
 <body>
@@ -66,6 +67,7 @@
 
 <div id="startScreen" class="overlay">
   <div class="card">
+    <canvas id="nickBadge" class="nick-badge" width="152" height="152" aria-hidden="true"></canvas>
     <div class="kicker">A tiny game by Nick Linthacum</div>
     <h1>ROCKET LANDER</h1>
     <p>Bring the booster home. Touch down upright and gently on the drone ship.</p>
@@ -84,6 +86,7 @@
 
 <div id="resultScreen" class="overlay hidden">
   <div class="card">
+    <canvas id="resBadge" class="nick-badge" width="152" height="152" aria-hidden="true"></canvas>
     <h2 id="resTitle">Touchdown!</h2>
     <p id="resMsg"></p>
     <div id="resTable"></div>
@@ -145,6 +148,8 @@ function saveName(v) { try { localStorage.setItem(NAME_KEY, v); } catch (e) {} }
 const S = { mode: 'start', level: 1, total: 0, best: loadBest(), t: 0, levelT: 0, overlayAt: 0, reason: '', last: null, cfg: null, stepping: true };
 let R = null, ship = null, wind = 0, windBase = 0;
 const particles = [];
+let headFx = null; // visual-only: Nick's head pops off on a crash. Not a hitbox.
+const face = { stress: 0, duck: 0, lookX: 0, lookY: -0.35, rLookX: 0.15, rLookY: 0.35 };
 const keys = { left: false, right: false, up: false };
 const touch = { left: false, right: false, up: false };
 
@@ -241,6 +246,7 @@ function setDemo() {
   S.mode = 'start'; S.level = 1; S.cfg = levelCfg(1);
   makeShip(S.cfg); ship.baseX = Math.min(VW * 0.86, VW - ship.w / 2 - 20); placeShip(0, true);
   R = { x: ship.x, y: ship.y - FOOT_Y, vx: 0, vy: 0, a: 0, fuel: 100, fuelMax: 100, legs: 1, thrust: false, alive: true, landed: true, relX: -8 };
+  resetNick();
 }
 function newGame() {
   runSerial++;
@@ -258,6 +264,7 @@ function startLevel() {
   R = { x: clamp(ship.x + rand(-1, 1) * Math.min(340, VW * 0.3), wide ? 210 : 40, wide ? VW - 160 : VW - 40), y: wide ? 100 : Math.max(170, VH * 0.18), vx: rand(-c.vx0, c.vx0), vy: rand(15, 30), a: rand(-0.15, 0.15),
         fuel: c.fuel, fuelMax: c.fuel, legs: 0, thrust: false, alive: true, landed: false, relX: 0 };
   particles.length = 0;
+  resetNick();
   keys.left = keys.right = keys.up = false;
   touch.left = touch.right = touch.up = false;
   S.mode = 'play'; S.levelT = 0; S.overlayAt = 0; S.last = null;
@@ -617,6 +624,8 @@ function step(dt) {
   if (S.cfg && S.cfg.gust) wind = windBase + S.cfg.gust * Math.sin(S.t * 0.7) * Math.sin(S.t * 0.23 + 1);
   if (S.mode === 'play') updateRocket(dt);
   else if (R && R.landed) { R.x = ship.x + R.relX; R.y = ship.y - FOOT_Y; R.vx = ship.vx; R.vy = ship.vy; R.a *= 0.9; R.thrust = false; }
+  updateFace(dt);
+  updateHeadFx(dt);
   updateParticles(dt);
   Snd.setThrust(S.mode === 'play' && R && R.thrust);
   if (S.overlayAt && S.t >= S.overlayAt) showResult();
@@ -674,6 +683,7 @@ function evaluateTouchdown(feet) {
   const info = { acc: Math.round(accF * 400), soft: Math.round(softF * 250), up: Math.round(upF * 100), fuel: Math.round(fuelF * 250), mult,
                  rvy: Math.max(0, rvy) / PX_PER_M, off: Math.abs(R.relX) / PX_PER_M };
   info.total = Math.round((info.acc + info.soft + info.up + info.fuel) * mult);
+  spawnCheer();
   for (let i = 0; i < 40; i++) {
     const s = Math.random() < 0.5 ? -1 : 1;
     particles.push({ t: 'smoke', x: R.x + s * rand(0, 20), y: ship.y - 2, vx: s * rand(30, 110), vy: rand(-25, -5), life: rand(0.8, 1.6), max: 1.6, size: rand(4, 9) });
@@ -683,6 +693,7 @@ function evaluateTouchdown(feet) {
 
 function crash(reason) {
   R.alive = false; R.thrust = false;
+  launchHead();
   const cx = R.x, cy = R.y + 10;
   for (let i = 0; i < 140; i++) {
     const a = rand(0, 6.28), sp = rand(30, 320) * Math.pow(Math.random(), 0.5);
@@ -732,6 +743,7 @@ function updateParticles(dt) {
       case 'debris': p.vy += 220 * dt; p.rot += p.vr * dt; if (p.y > seaY + 4) { p.vx *= 0.8; p.vy = Math.min(p.vy, 20); } break;
       case 'drop': p.vy += 400 * dt; if (p.y > seaY + 6 && p.vy > 0) p.life = 0; break;
       case 'ring': p.size += 360 * dt; break;
+      case 'confetti': p.vy += 150 * dt; p.rot += p.vr * dt; p.vx *= 0.992; break;
     }
     p.x += p.vx * dt; p.y += p.vy * dt;
     if (p.t === 'flame' || p.t === 'smoke') {
@@ -753,10 +765,13 @@ function render() {
   drawOceanBack(th);
   drawShip();
   drawParticles(false);
+  drawShipNick();
   if (R && R.alive) drawRocket();
   drawParticles(true);
   drawOceanFront(th);
+  if (headFx) drawHeadFx();
   if (S.mode === 'play' || S.mode === 'landed' || S.mode === 'crashed') drawHUD();
+  paintBadges();
 }
 
 function drawSky(th) {
@@ -847,6 +862,776 @@ function roundRect(x, y, w, h, r) {
   ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
+// ---------- cartoon Nick (visual only; physics and hitboxes are unchanged) ----------
+// Head origin sits in rocket-local space. Hair tops out just past the old nose
+// so bodyPoints()'s y=-44 cap still lines up with the silhouette.
+const NICK_Y = -27;
+const VIS_BODY_TOP = -12;
+const FIN_Y = -4;
+const NICK_HALF_W = 18.2;
+const NICK_CHIN = 15.8;
+
+function resetNick() {
+  headFx = null;
+  face.stress = 0;
+  face.duck = 0;
+  face.lookX = 0;
+  face.lookY = -0.45;
+  face.rLookX = 0.32;
+  face.rLookY = 0.06;
+}
+
+function rocketStressTarget() {
+  if (!R || !ship || !R.alive || R.landed || S.mode !== 'play') return 0;
+  const alt = ship.y - (R.y + FOOT_Y);
+  const near = clamp(1 - Math.max(0, alt) / 240, 0, 1);
+  const fall = R.vy > 0 ? clamp(R.vy / MAX_VY, 0, 1.5) : 0;
+  const slide = clamp(Math.abs(R.vx) / MAX_VX, 0, 1.5);
+  const tilt = clamp(Math.abs(R.a) * 180 / Math.PI / MAX_TILT, 0, 1.5);
+  const fuel = R.fuel / R.fuelMax;
+  const fuelS = fuel >= 0.42 ? 0 : fuel >= 0.18 ? ((0.42 - fuel) / 0.42) * 0.62 : 0.68 + ((0.18 - fuel) / 0.18) * 0.32;
+  let s = Math.max(fall * 0.4, slide * 0.38, tilt * 0.44, fuelS * 0.7);
+  const danger = Math.max(fall, slide, tilt);
+  if (danger > 0.74) s += (danger - 0.74) * (0.28 + 1.25 * near);
+  if (fuelS > 0.5) s += (fuelS - 0.5) * 0.45 * near;
+  if (alt < 78 && alt > -8 && danger > 0.88) s = Math.max(s, 0.94);
+  if (alt < 46 && alt > -8 && (R.vy > MAX_VY * 0.7 || Math.abs(R.a) * 180 / Math.PI > MAX_TILT * 0.95)) s = Math.max(s, 1);
+  return clamp(s, 0, 1);
+}
+
+function duckTarget() {
+  if (!R || !ship || !R.alive || S.mode !== 'play') return 0;
+  const alt = ship.y - (R.y + FOOT_Y);
+  if (alt > 200 || alt < -20) return 0;
+  const hot = Math.max(R.vy / MAX_VY, Math.abs(R.vx) / MAX_VX, Math.abs(R.a) * 180 / Math.PI / MAX_TILT);
+  if (hot < 0.72) return 0;
+  return clamp((hot - 0.5) * clamp((185 - alt) / 150, 0, 1), 0, 1);
+}
+
+function shipLookTarget() {
+  if (!R || !ship) return { x: 0.1, y: -0.55 };
+  const L = shipNickLayout();
+  const hx = ship.x + L.hx, hy = ship.y + L.hy - 4;
+  const dx = R.x - hx, dy = (R.y + NICK_Y) - hy;
+  const m = Math.hypot(dx, dy) || 1;
+  return { x: clamp(dx / m, -1, 1), y: clamp(dy / m, -1, 1) };
+}
+
+function rocketLookTarget() {
+  if (!R || !ship) return { x: 0.3, y: 0.08 };
+  const dx = ship.x - R.x, dy = ship.y - (R.y + NICK_Y);
+  const m = Math.hypot(dx, dy) || 1;
+  const wx = dx / m, wy = dy / m;
+  const co = Math.cos(R.a), si = Math.sin(R.a);
+  let lx = wx * co + wy * si;
+  let ly = -wx * si + wy * co;
+  const intent = clamp(face.stress, 0, 1);
+  lx = lx * (0.2 + 0.8 * intent) + 0.34 * (1 - intent);
+  ly = ly * (0.3 + 0.7 * intent) + 0.04 * (1 - intent);
+  return { x: clamp(lx, -1, 1), y: clamp(ly, -1, 1) };
+}
+
+function updateFace(dt) {
+  const ks = 1 - Math.exp(-16 * dt);
+  const kd = 1 - Math.exp(-9 * dt);
+  const kl = 1 - Math.exp(-14 * dt);
+  face.stress += (rocketStressTarget() - face.stress) * ks;
+  const landed = S.mode === 'landed';
+  face.duck += ((landed ? 0 : duckTarget()) - face.duck) * (landed ? ks : kd);
+  const sl = shipLookTarget();
+  face.lookX += (sl.x - face.lookX) * kl;
+  face.lookY += (sl.y - face.lookY) * kl;
+  const rl = rocketLookTarget();
+  face.rLookX += (rl.x - face.rLookX) * kl;
+  face.rLookY += (rl.y - face.rLookY) * kl;
+}
+
+function nickRocketMood() {
+  if (!R || !R.alive) return 'dizzy';
+  if (R.landed || S.mode !== 'play') return 'calm';
+  if (face.stress > 0.78) return 'panic';
+  if (face.stress > 0.4) return 'worry';
+  return 'calm';
+}
+
+function nickShipMood() {
+  if (S.mode === 'landed') return 'cheer';
+  if (S.mode === 'crashed' || (R && !R.alive)) return 'wince';
+  if (face.duck > 0.48) return 'wince';
+  if (face.duck > 0.16) return 'worry';
+  return 'calm';
+}
+
+function shipNickLayout() {
+  const half = ship.w / 2;
+  const zone = Math.min(26, half * 0.4);
+  const margin = 8;
+  const room = (half - 4) - (zone + margin);
+  const scale = clamp(room / (NICK_HALF_W * 2), 0.46, 1);
+  const halfW = NICK_HALF_W * scale;
+  let hx = -zone - margin - halfW;
+  const deckLimit = -half + halfW + 3;
+  if (hx < deckLimit) hx = deckLimit;
+  const hy = -1.2 - NICK_CHIN * scale;
+  return { hx, hy, scale, halfW, zone };
+}
+
+function launchHead() {
+  if (headFx || !R) return;
+  const co = Math.cos(R.a), si = Math.sin(R.a);
+  headFx = {
+    x: R.x - NICK_Y * si, y: R.y + NICK_Y * co,
+    vx: clamp(R.vx * 0.22 + rand(-26, 26), -64, 64),
+    vy: -rand(46, 74),
+    a: R.a, va: rand(-1.2, 1.2),
+    t: 0, phase: rand(0, 6.28), float: false, splash: !!R.splash,
+  };
+}
+
+function updateHeadFx(dt) {
+  const h = headFx;
+  if (!h) return;
+  h.t += dt;
+  const pull = h.t < 0.1 ? 6 : 15;
+  h.va += (-h.a * pull - h.va * 4.5) * dt;
+  h.a += h.va * dt;
+  if (!h.float) {
+    h.vy += G * dt;
+    h.vx *= 0.992;
+    h.x += h.vx * dt;
+    h.y += h.vy * dt;
+    if (h.y > seaY - 9) {
+      h.y = seaY - 9;
+      h.vy *= -0.28;
+      h.vx *= 0.72;
+      if (h.vy > -22) h.float = true;
+    }
+  } else {
+    h.x += h.vx * dt;
+    h.vx *= 0.99;
+    h.y = seaY - 8 + Math.sin(S.t * 2.3 + h.phase) * 2.1;
+  }
+  if (h.x < 22) { h.x = 22; h.vx = Math.abs(h.vx) * 0.35; }
+  if (h.x > VW - 22) { h.x = VW - 22; h.vx = -Math.abs(h.vx) * 0.35; }
+}
+
+function spawnCheer() {
+  if (!ship) return;
+  const L = shipNickLayout();
+  const colors = ['#ffd38a', '#ff8a4c', '#fff7ea', '#9fd3ff', '#b8f5cf'];
+  for (let i = 0; i < 16; i++) {
+    particles.push({
+      t: 'confetti',
+      x: ship.x + L.hx + rand(-5, 5), y: ship.y + L.hy - 6,
+      vx: -rand(6, 58) + rand(-12, 14), vy: rand(-108, -46),
+      life: rand(0.85, 1.45), max: 1.45, size: rand(2.2, 3.6),
+      rot: rand(0, 6.28), vr: rand(-7, 7), c: colors[i % colors.length],
+    });
+  }
+}
+
+function nickPortrait() {
+  const rocket = R ? (() => {
+    const co = Math.cos(R.a), si = Math.sin(R.a);
+    return { x: R.x - NICK_Y * si, y: R.y + NICK_Y * co };
+  })() : null;
+  const deck = ship ? (() => {
+    const L = shipNickLayout();
+    return { x: ship.x + L.hx, y: ship.y + L.hy, scale: L.scale };
+  })() : null;
+  return { rocket, deck, head: headFx ? { x: headFx.x, y: headFx.y } : null, scale, dpr };
+}
+
+function traceHead(c) {
+  c.beginPath();
+  c.moveTo(0, 15.8);
+  c.bezierCurveTo(7.2, 16.4, 13.2, 12.6, 15.2, 5.6);
+  c.bezierCurveTo(17.2, -0.6, 16.2, -8, 13.2, -12.4);
+  c.bezierCurveTo(9.4, -16.8, 4.6, -17.6, 0, -17.6);
+  c.bezierCurveTo(-4.6, -17.6, -9.4, -16.8, -13.2, -12.4);
+  c.bezierCurveTo(-16.2, -8, -17.2, -0.6, -15.2, 5.6);
+  c.bezierCurveTo(-13.2, 12.6, -7.2, 16.4, 0, 15.8);
+  c.closePath();
+}
+
+function traceHair(c) {
+  c.beginPath();
+  c.moveTo(-14.4, 5.6);
+  c.quadraticCurveTo(-17.4, -1, -16, -8);
+  c.lineTo(-14.6, -5.2);
+  c.lineTo(-13.2, -15.4);
+  c.lineTo(-10.4, -7.2);
+  c.lineTo(-7.6, -18.6);
+  c.lineTo(-4.2, -8.4);
+  c.lineTo(-1.2, -20.6);
+  c.lineTo(2.4, -9.2);
+  c.lineTo(5.6, -19.2);
+  c.lineTo(8.8, -8.6);
+  c.lineTo(12, -16.2);
+  c.lineTo(14.4, -6.4);
+  c.lineTo(16.6, -11.4);
+  c.quadraticCurveTo(18.4, -3, 15.8, 2.2);
+  c.quadraticCurveTo(14.6, 6.4, 13.2, 6.2);
+  // hairline stays high so the forehead and cocked brow stay visible
+  c.quadraticCurveTo(10.2, -7.5, 7.2, -12.6);
+  c.quadraticCurveTo(3.6, -10.6, 1.2, -13.6);
+  c.quadraticCurveTo(-1.8, -10.8, -4.8, -13.6);
+  c.quadraticCurveTo(-8.2, -10.8, -11, -12.8);
+  c.quadraticCurveTo(-13.2, -7, -14.4, 5.6);
+  c.closePath();
+}
+
+function drawNickHead(c, mood, opt) {
+  opt = opt || {};
+  if (mood === 'smug') mood = 'calm';
+  const t = opt.t || 0;
+  const splash = !!opt.splash;
+  const charred = mood === 'dizzy' && !splash;
+  const OUT = '#3a220e';
+  const skin0 = charred ? '#c9a48c' : '#ffd2b0';
+  const skin1 = charred ? '#b18468' : '#f6b686';
+  const skin2 = charred ? '#8a624c' : '#e09668';
+  const hairM = charred ? '#3a2a22' : '#6a3e1c';
+  const hairD = charred ? '#241812' : '#4e2e12';
+  const hairL = charred ? '#5a4034' : '#9a6434';
+  c.save();
+  c.lineJoin = 'round';
+  c.lineCap = 'round';
+  if (mood === 'panic') c.translate(Math.sin(t * 45) * 0.45, Math.cos(t * 57) * 0.32);
+
+  c.fillStyle = 'rgba(40, 22, 12, 0.16)';
+  c.beginPath();
+  c.ellipse(1.1, 3.2, 14.5, 16.2, 0, 0, Math.PI * 2);
+  c.fill();
+
+  function ear(sign) {
+    c.fillStyle = skin1;
+    c.beginPath();
+    c.ellipse(sign * 15.2, 2.4, 3.5, 4.5, sign * -0.15, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.25;
+    c.stroke();
+    c.fillStyle = skin2;
+    c.beginPath();
+    c.ellipse(sign * 15.3, 2.8, 1.7, 2.7, sign * -0.2, 0, Math.PI * 2);
+    c.fill();
+  }
+  ear(-1); ear(1);
+
+  if (opt.anchor === 'rocket' || opt.anchor === 'loose') {
+    c.fillStyle = skin2;
+    c.beginPath();
+    if (opt.anchor === 'rocket') {
+      c.moveTo(-5.5, 10); c.lineTo(5.5, 10); c.lineTo(6.5, 19); c.lineTo(-6.5, 19);
+    } else {
+      c.ellipse(0, 16.2, 5.2, 3, 0, 0, Math.PI * 2);
+    }
+    c.closePath();
+    c.fill();
+  } else if (opt.anchor === 'ship') {
+    c.fillStyle = '#243049';
+    c.beginPath();
+    c.moveTo(-9.2, 11.6);
+    c.quadraticCurveTo(0, 7.6, 9.2, 11.6);
+    c.lineTo(10.2, 18.6);
+    c.lineTo(-10.2, 18.6);
+    c.closePath();
+    c.fill();
+    c.fillStyle = '#ff8a4c';
+    c.fillRect(-3.1, 13.5, 6.2, 1.45);
+  }
+
+  const sg = c.createLinearGradient(-14, -16, 12, 16);
+  sg.addColorStop(0, skin0); sg.addColorStop(0.5, skin1); sg.addColorStop(1, skin2);
+  c.fillStyle = sg;
+  traceHead(c);
+  c.fill();
+  c.strokeStyle = OUT;
+  c.lineWidth = 1.7;
+  c.stroke();
+
+  const hg = c.createLinearGradient(-8, -20, 10, 0);
+  hg.addColorStop(0, hairL); hg.addColorStop(0.45, hairM); hg.addColorStop(1, hairD);
+  c.fillStyle = hg;
+  traceHair(c);
+  c.fill();
+  c.save();
+  traceHair(c);
+  c.clip();
+  c.fillStyle = hairL;
+  c.globalAlpha = charred ? 0.25 : 0.9;
+  c.beginPath();
+  c.ellipse(-5.5, -14.5, 4.6, 2.6, -0.7, 0, Math.PI * 2);
+  c.ellipse(2.2, -15.2, 3.2, 2, 0.35, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+  c.strokeStyle = OUT;
+  c.lineWidth = 1.55;
+  c.globalAlpha = 1;
+  traceHair(c);
+  c.stroke();
+
+  if (charred) {
+    c.save();
+    traceHair(c);
+    c.clip();
+    c.fillStyle = '#1a120e';
+    c.beginPath();
+    c.ellipse(8, -12, 4.5, 3.2, 0.6, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    traceHair(c);
+    c.strokeStyle = OUT;
+    c.stroke();
+  }
+
+  const blush = mood === 'cheer' ? 0.42 : mood === 'calm' ? 0.26 : mood === 'worry' ? 0.14 : mood === 'wince' ? 0.1 : 0.05;
+  if (blush > 0.04 && !charred) {
+    c.save();
+    traceHead(c);
+    c.clip();
+    c.fillStyle = 'rgba(214, 96, 86, ' + blush + ')';
+    c.beginPath();
+    c.ellipse(-8, 6.6, 3.4, 2.05, -0.35, 0, Math.PI * 2);
+    c.ellipse(8.2, 6.3, 3.5, 2.1, 0.3, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+
+  function blinkAmt(fast) {
+    const u = (t * (fast ? 1.3 : 1) + (opt.salt || 0)) % (fast ? 3.1 : 4.6);
+    if (u < 0.055) return u / 0.055;
+    if (u < 0.11) return 1 - (u - 0.055) / 0.055;
+    return 0;
+  }
+  function brow(x, y, w, tilt, thick) {
+    c.save();
+    c.translate(x, y);
+    c.rotate(tilt);
+    c.fillStyle = charred ? '#2a1c14' : '#402810';
+    c.beginPath();
+    c.moveTo(-w, 0.3);
+    c.quadraticCurveTo(-w * 0.15, -thick * 0.55, w, -thick * 0.15);
+    c.lineTo(w * 0.92, thick * 0.72);
+    c.quadraticCurveTo(0, thick * 0.95, -w, thick * 0.7);
+    c.closePath();
+    c.fill();
+    c.restore();
+  }
+  function eye(x, y, rx, ry, open, lx, ly, pupilK, irisK) {
+    const h = Math.max(0.9, ry * open);
+    lx = clamp(lx, -1, 1); ly = clamp(ly, -1, 1);
+    c.save();
+    c.beginPath();
+    c.ellipse(x, y, rx, h, 0, 0, Math.PI * 2);
+    c.fillStyle = '#f4f7fb';
+    c.fill();
+    c.clip();
+    const ix = x + lx * rx * 0.36;
+    const iy = y + ly * h * 0.32;
+    const ir = Math.max(1.2, Math.min(rx, h) * irisK);
+    const ig = c.createRadialGradient(ix - ir * 0.3, iy - ir * 0.35, ir * 0.15, ix, iy, ir);
+    ig.addColorStop(0, '#8eb4cc');
+    ig.addColorStop(0.55, '#3f7398');
+    ig.addColorStop(1, '#1c4664');
+    c.fillStyle = ig;
+    c.beginPath();
+    c.arc(ix, iy, ir, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#12161c';
+    c.beginPath();
+    c.arc(ix + lx * 0.2, iy + ly * 0.15, Math.max(0.55, ir * pupilK), 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = '#fff';
+    c.beginPath();
+    c.arc(ix - ir * 0.34, iy - ir * 0.32, Math.max(0.65, ir * 0.2), 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.15;
+    c.beginPath();
+    c.ellipse(x, y, rx, h, 0, 0, Math.PI * 2);
+    c.stroke();
+  }
+  function shut(x, y, w, happy) {
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.6;
+    c.beginPath();
+    if (happy) {
+      c.moveTo(x - w, y + 0.8);
+      c.quadraticCurveTo(x, y - 3.5, x + w, y + 0.8);
+    } else {
+      c.moveTo(x - w, y - 1.2);
+      c.quadraticCurveTo(x, y + 2.5, x + w, y - 1.2);
+    }
+    c.stroke();
+  }
+  function spiral(x, y, r, dir) {
+    c.save();
+    c.translate(x, y);
+    c.rotate(t * 2.4 * dir);
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.25;
+    c.beginPath();
+    const n = 26;
+    for (let i = 0; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2 * 2.7;
+      const rr = r * (i / n);
+      const px = Math.cos(a) * rr, py = Math.sin(a) * rr;
+      if (i) c.lineTo(px, py); else c.moveTo(px, py);
+    }
+    c.stroke();
+    c.restore();
+  }
+  function nose() {
+    c.fillStyle = charred ? '#8d624c' : '#e39a6c';
+    c.beginPath();
+    c.moveTo(-0.2, 2.2);
+    c.quadraticCurveTo(3.8, 3.2, 3.1, 7.4);
+    c.quadraticCurveTo(1.8, 9.3, -0.2, 8.2);
+    c.quadraticCurveTo(-2.2, 7.2, -1, 4.6);
+    c.closePath();
+    c.fill();
+    c.fillStyle = charred ? 'rgba(255,220,200,0.18)' : 'rgba(255,236,220,0.75)';
+    c.beginPath();
+    c.ellipse(0.3, 4.4, 1.05, 1.45, 0.3, 0, Math.PI * 2);
+    c.fill();
+    c.fillStyle = 'rgba(150, 70, 54, 0.4)';
+    c.beginPath();
+    c.ellipse(-1.5, 7.5, 1.05, 0.62, -0.4, 0, Math.PI * 2);
+    c.ellipse(2.3, 7.3, 1.1, 0.64, 0.35, 0, Math.PI * 2);
+    c.fill();
+  }
+  function teethRow(x, y, w, h, n, upper) {
+    c.fillStyle = '#fffaf4';
+    c.beginPath();
+    c.moveTo(x, y);
+    c.quadraticCurveTo(x + w / 2, y + (upper ? h : -h * 0.15), x + w, y + (upper ? 0.3 : 0));
+    c.lineTo(x + w - 0.4, y + h);
+    c.quadraticCurveTo(x + w / 2, y + h + (upper ? 0.4 : 0.8), x + 0.4, y + h - (upper ? 0 : 0.2));
+    c.closePath();
+    c.fill();
+    c.strokeStyle = 'rgba(90, 50, 48, 0.45)';
+    c.lineWidth = 0.65;
+    c.beginPath();
+    for (let i = 1; i < n; i++) {
+      const gx = x + (w * i) / n;
+      c.moveTo(gx, y + 0.4);
+      c.lineTo(gx + 0.15, y + h - 0.3);
+    }
+    c.stroke();
+  }
+
+  const lx = opt.lookX || 0, ly = opt.lookY || 0;
+  if (mood === 'cheer') {
+    brow(-6.3, -8.4, 5.1, -0.12, 2.7);
+    brow(6.4, -8.4, 5.1, 0.12, 2.7);
+    shut(-6.2, -1.1, 5.1, true);
+    shut(6.4, -1.1, 5.1, true);
+  } else if (mood === 'wince') {
+    brow(-6.4, -5.4, 5.3, 0.48, 3.15);
+    brow(6.5, -5.4, 5.3, -0.48, 3.15);
+    shut(-6.3, -0.4, 5.2, false);
+    shut(6.5, -0.4, 5.2, false);
+  } else if (mood === 'dizzy') {
+    brow(-6.2, -7.6, 5, -0.08, 2.8);
+    brow(6.6, -7.3, charred ? 3.4 : 5, 0.22, charred ? 2.3 : 2.8);
+    spiral(-6.2, -1, 4.2, 1);
+    spiral(6.4, -1, 4.2, -1);
+  } else if (mood === 'panic') {
+    eye(-6.9, -2.2, 6.6, 6.4, 1, lx, ly, 0.36, 0.44);
+    eye(6.9, -2.2, 6.6, 6.4, 1, lx, ly, 0.36, 0.44);
+    brow(-7.1, -10.2, 5.6, -0.62, 3.2);
+    brow(7.2, -10.2, 5.6, 0.62, 3.2);
+  } else if (mood === 'worry') {
+    const b = blinkAmt(true);
+    const o = Math.max(0.2, 1.05 * (1 - b * 0.88));
+    eye(-6.5, -1.5, 5.9, 5.6, o, lx, ly, 0.42, 0.5);
+    eye(6.6, -1.5, 5.9, 5.6, o, lx, ly, 0.42, 0.5);
+    brow(-6.7, -8.6, 5.4, -0.55, 3.15);
+    brow(6.8, -8.6, 5.4, 0.55, 3.15);
+  } else {
+    const b = blinkAmt(false);
+    // smug: viewer's left eye lidded under a low brow, right brow cocked up
+    eye(-6.2, -0.85, 5.7, 4.6, Math.max(0.34, 0.72 * (1 - b * 0.9)), lx, ly, 0.5, 0.62);
+    eye(6.5, -1.35, 5.5, 4.8, Math.max(0.28, 0.95 * (1 - b * 0.9)), lx, ly, 0.48, 0.58);
+    brow(-6.3, -4.35, 5.6, 0.46, 3.25);
+    brow(6.8, -9.05, 5.6, -0.7, 3.05);
+  }
+  nose();
+
+  if (mood === 'panic') {
+    c.fillStyle = '#4a2030';
+    c.beginPath();
+    c.moveTo(-8.2, 9.6);
+    c.bezierCurveTo(-9.4, 14.8, -6.2, 17.6, 0, 17.5);
+    c.bezierCurveTo(6.4, 17.6, 9.5, 14.6, 8.3, 9.5);
+    c.quadraticCurveTo(0, 12.4, -8.2, 9.6);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.15;
+    c.stroke();
+    teethRow(-6.3, 10, 12.4, 3.15, 6, true);
+    teethRow(-5.4, 14.15, 10.6, 2.7, 5, false);
+  } else if (mood === 'cheer') {
+    c.fillStyle = '#6a3040';
+    c.beginPath();
+    c.moveTo(-7.6, 9.4);
+    c.quadraticCurveTo(0, 18.6, 7.6, 9.4);
+    c.quadraticCurveTo(0, 12.4, -7.6, 9.4);
+    c.closePath();
+    c.fill();
+    c.save();
+    c.clip();
+    teethRow(-5.6, 10.1, 11.2, 3.3, 5, true);
+    c.restore();
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.15;
+    c.beginPath();
+    c.moveTo(-7.6, 9.4);
+    c.quadraticCurveTo(0, 18.6, 7.6, 9.4);
+    c.stroke();
+  } else if (mood === 'wince') {
+    c.fillStyle = '#fffaf4';
+    c.beginPath();
+    c.moveTo(-6.2, 10.6);
+    c.quadraticCurveTo(0, 12.6, 6.2, 10.6);
+    c.quadraticCurveTo(0, 14.3, -6.2, 10.6);
+    c.closePath();
+    c.fill();
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.1;
+    c.stroke();
+    c.strokeStyle = 'rgba(80,40,40,0.4)';
+    c.beginPath();
+    c.moveTo(-2.8, 11); c.lineTo(-2.7, 13.2);
+    c.moveTo(0.1, 11.1); c.lineTo(0.1, 13.4);
+    c.moveTo(2.9, 11); c.lineTo(2.8, 13.2);
+    c.stroke();
+  } else if (mood === 'dizzy' && splash) {
+    c.fillStyle = '#4a2030';
+    c.beginPath();
+    c.ellipse(0.2, 12.2, 3.3, 3.6, 0, 0, Math.PI * 2);
+    c.fill();
+    c.strokeStyle = OUT;
+    c.lineWidth = 1.15;
+    c.stroke();
+  } else if (mood === 'dizzy') {
+    c.fillStyle = '#5c2840';
+    c.beginPath();
+    c.moveTo(-6.4, 10.6);
+    c.quadraticCurveTo(0, 17.2, 6.6, 10.8);
+    c.quadraticCurveTo(0, 13.2, -6.4, 10.6);
+    c.closePath();
+    c.fill();
+    c.save();
+    c.clip();
+    teethRow(-4.6, 11, 9.2, 2.6, 4, true);
+    c.restore();
+  } else if (mood === 'worry') {
+    c.strokeStyle = '#6e343c';
+    c.lineWidth = 1.85;
+    c.beginPath();
+    c.moveTo(-6.6, 12.6);
+    c.quadraticCurveTo(0, 9.2, 6.6, 12.7);
+    c.stroke();
+  } else {
+    c.fillStyle = '#7a3a44';
+    c.beginPath();
+    c.moveTo(-6.5, 12.2);
+    c.quadraticCurveTo(1.6, 16.4, 8.5, 8.4);
+    c.quadraticCurveTo(2.4, 13.2, -6.5, 13.5);
+    c.closePath();
+    c.fill();
+  }
+
+  if (charred) {
+    c.save();
+    traceHead(c);
+    c.clip();
+    c.fillStyle = 'rgba(28, 20, 16, 0.5)';
+    [[-7.2, 7.4, 3.4, 2.2], [8, 6.2, 3.8, 2.4], [-2, -8, 2.6, 1.8], [2.4, 12.2, 3, 1.6]].forEach(s => {
+      c.beginPath();
+      c.ellipse(s[0], s[1], s[2], s[3], 0.4, 0, Math.PI * 2);
+      c.fill();
+    });
+    c.restore();
+  }
+  if (splash) {
+    c.save();
+    traceHead(c);
+    c.clip();
+    c.fillStyle = 'rgba(80, 160, 210, 0.2)';
+    c.fillRect(-20, -20, 40, 40);
+    c.restore();
+  }
+
+  let drops = 0;
+  if (mood === 'worry') drops = (opt.stress || 0.5) > 0.58 ? 3 : 2;
+  else if (mood === 'panic') drops = 5;
+  else if (mood === 'wince') drops = 2;
+  else if (splash) drops = 2;
+  const anchors = [[-12.2, -13.2, 0.95, 0.05], [10.6, -12.4, 0.85, 0.37], [-16.2, 1.6, 0.8, 0.58], [15.4, 3.2, 1, 0.18], [4.8, -16.2, 0.7, 0.72]];
+  for (let i = 0; i < drops; i++) {
+    const a = anchors[i];
+    const drip = (t * 0.65 + a[3]) % 1;
+    const yy = a[1] + drip * 9;
+    const alpha = drip < 0.12 ? drip / 0.12 : drip > 0.8 ? (1 - drip) / 0.2 : 1;
+    const s = a[2];
+    c.save();
+    c.translate(a[0], yy);
+    c.globalAlpha = alpha;
+    c.fillStyle = '#b6e4f6';
+    c.strokeStyle = '#5aa4c6';
+    c.lineWidth = 0.75;
+    c.beginPath();
+    c.moveTo(0, -3.4 * s);
+    c.bezierCurveTo(1.75 * s, -0.3 * s, 1.6 * s, 2.3 * s, 0, 3.4 * s);
+    c.bezierCurveTo(-1.6 * s, 2.3 * s, -1.75 * s, -0.3 * s, 0, -3.4 * s);
+    c.fill();
+    c.stroke();
+    c.fillStyle = 'rgba(255,255,255,0.9)';
+    c.beginPath();
+    c.ellipse(-0.45 * s, 0.15 * s, 0.42 * s, 0.85 * s, -0.4, 0, Math.PI * 2);
+    c.fill();
+    c.restore();
+  }
+
+  function spark(x, y, r, spin) {
+    c.save();
+    c.translate(x, y);
+    c.rotate(spin || 0);
+    c.fillStyle = '#ffe56a';
+    c.beginPath();
+    c.moveTo(0, -r);
+    c.lineTo(r * 0.28, -r * 0.28);
+    c.lineTo(r, 0);
+    c.lineTo(r * 0.28, r * 0.28);
+    c.lineTo(0, r);
+    c.lineTo(-r * 0.28, r * 0.28);
+    c.lineTo(-r, 0);
+    c.lineTo(-r * 0.28, -r * 0.28);
+    c.closePath();
+    c.fill();
+    c.restore();
+  }
+  if (mood === 'dizzy') {
+    for (let i = 0; i < 3; i++) {
+      const a = t * 3 + i * 2.094;
+      spark(Math.cos(a) * 22, Math.sin(a) * 8 - 19, i === 1 ? 4 : 3.1, -a);
+    }
+  } else if (mood === 'cheer') {
+    const tw = 0.75 + 0.25 * Math.sin(t * 6);
+    spark(-17, -15, 3.2 * tw, t);
+    spark(16.5, -17, 2.7 * tw, -t * 1.3);
+  }
+  c.restore();
+}
+
+function drawShipNick() {
+  if (!ship) return;
+  const L = shipNickLayout();
+  const mood = nickShipMood();
+  const duck = mood === 'cheer' ? 0 : face.duck;
+  const bob = mood === 'cheer' ? -Math.abs(Math.sin(S.t * 8.5)) * 3.5 : duck * 6;
+  const tilt = mood === 'wince' ? -face.lookX * 0.3 : clamp(face.lookX, -1, 1) * 0.14;
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  ctx.fillStyle = 'rgba(0,0,0,0.2)';
+  ctx.beginPath();
+  ctx.ellipse(L.hx, -0.35, Math.min(8, L.halfW * 0.42), 1.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.translate(L.hx, L.hy + bob);
+  ctx.rotate(tilt);
+  ctx.scale(L.scale, L.scale * (mood === 'wince' ? 0.9 : 1));
+  drawNickHead(ctx, mood, {
+    t: S.t, salt: 2.15, lookX: face.lookX, lookY: face.lookY,
+    stress: Math.max(face.stress, duck), anchor: 'ship',
+  });
+  ctx.restore();
+  drawMastLights();
+  drawPadTarget();
+}
+
+function drawMastLights() {
+  if (!ship) return;
+  const half = ship.w / 2;
+  const L = shipNickLayout();
+  let portX = -half + 2;
+  const headLeft = L.hx - L.halfW;
+  if (headLeft - portX < 13) portX = clamp(headLeft - 12, -half - 6, -half + 2);
+  const blink = (Math.sin(S.t * 4) > 0.3) ? 1 : 0.25;
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  for (const sx of [portX, half - 2]) {
+    ctx.fillStyle = '#5a6275'; ctx.fillRect(sx - 0.6, -16, 1.2, 6);
+    ctx.fillStyle = 'rgba(255,70,60,' + blink + ')'; ctx.beginPath(); ctx.arc(sx, -17, 1.8, 0, 7); ctx.fill();
+    ctx.fillStyle = 'rgba(255,70,60,' + (0.25 * blink) + ')'; ctx.beginPath(); ctx.arc(sx, -17, 6, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawPadTarget() {
+  if (!ship) return;
+  const half = ship.w / 2;
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  ctx.strokeStyle = 'rgba(255,236,170,0.92)';
+  ctx.lineWidth = 1.15;
+  ctx.beginPath();
+  ctx.ellipse(0, -0.5, Math.min(26, half * 0.4), 1.6, 0, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.fillStyle = 'rgba(255,236,170,0.95)';
+  ctx.fillRect(-2, -1.5, 4, 2);
+  ctx.restore();
+}
+
+function drawHeadFx() {
+  if (!headFx) return;
+  const h = headFx;
+  ctx.save();
+  ctx.translate(h.x, h.y);
+  ctx.rotate(h.a);
+  drawNickHead(ctx, 'dizzy', { t: S.t, salt: 3.1, lookX: 0, lookY: 0, splash: h.splash, stress: 1, anchor: 'loose' });
+  ctx.restore();
+}
+
+function paintBadge(el, mood, opt) {
+  if (!el) return;
+  const d = Math.min(window.devicePixelRatio || 1, 2);
+  let cssW = 76, cssH = 76;
+  const st = getComputedStyle(el);
+  const sw = parseFloat(st.width), sh = parseFloat(st.height);
+  if (sw > 8 && sh > 8) { cssW = sw; cssH = sh; }
+  const w = Math.max(1, Math.round(cssW * d)), h = Math.max(1, Math.round(cssH * d));
+  if (el.width !== w || el.height !== h) { el.width = w; el.height = h; }
+  const b = el.getContext('2d');
+  b.setTransform(d, 0, 0, d, 0, 0);
+  b.clearRect(0, 0, cssW + 2, cssH + 2);
+  b.save();
+  b.translate(cssW / 2, cssH * 0.56);
+  const sc = cssW / 64;
+  b.scale(sc, sc);
+  drawNickHead(b, mood, opt || {});
+  b.restore();
+}
+
+function paintBadges() {
+  const start = $('startScreen'), res = $('resultScreen');
+  if (start && !start.classList.contains('hidden')) {
+    paintBadge($('nickBadge'), 'calm', { t: S.t, salt: 1.2, lookX: 0.38, lookY: 0.02, stress: 0, anchor: 'badge' });
+  }
+  if (res && !res.classList.contains('hidden')) {
+    const crashed = S.mode !== 'landed';
+    paintBadge($('resBadge'), crashed ? 'dizzy' : 'cheer', {
+      t: S.t, salt: 2.5, lookX: 0, lookY: 0, stress: crashed ? 1 : 0,
+      splash: !!(R && R.splash), anchor: 'badge',
+    });
+  }
+}
+
 function drawShip() {
   if (!ship) return;
   const x = ship.x, y = ship.y, w = ship.w, half = w / 2;
@@ -867,18 +1652,7 @@ function drawShip() {
   ctx.save(); ctx.beginPath(); ctx.rect(-half, -2, 14, 3); ctx.rect(half - 14, -2, 14, 3); ctx.clip();
   for (let i = -half - 10; i < half + 10; i += 6) { ctx.fillStyle = '#f2c230'; ctx.beginPath(); ctx.moveTo(i, 1); ctx.lineTo(i + 3, -2); ctx.lineTo(i + 6, -2); ctx.lineTo(i + 3, 1); ctx.fill(); }
   ctx.restore();
-  // landing target (ellipse seen at a shallow angle)
-  ctx.strokeStyle = 'rgba(255,236,170,0.85)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.ellipse(0, -0.5, Math.min(26, half * 0.4), 1.6, 0, 0, 7); ctx.stroke();
-  ctx.fillStyle = 'rgba(255,236,170,0.9)'; ctx.fillRect(-2, -1.5, 4, 2);
-  // mast lights
-  const blink = (Math.sin(S.t * 4) > 0.3) ? 1 : 0.25;
-  for (const sx of [-half + 2, half - 2]) {
-    ctx.fillStyle = '#5a6275'; ctx.fillRect(sx - 0.6, -16, 1.2, 6);
-    ctx.fillStyle = `rgba(255,70,60,${blink})`; ctx.beginPath(); ctx.arc(sx, -17, 1.8, 0, 7); ctx.fill();
-    ctx.fillStyle = `rgba(255,70,60,${0.25 * blink})`; ctx.beginPath(); ctx.arc(sx, -17, 6, 0, 7); ctx.fill();
-  }
-  // floodlight glow on deck at night-ish levels
+  // floodlight glow on deck at night-ish levels (pad mark and mast lights are drawn after Nick)
   if (S.level >= 2) {
     const fl = ctx.createRadialGradient(0, -2, 2, 0, -2, half);
     fl.addColorStop(0, 'rgba(255,240,200,0.18)'); fl.addColorStop(1, 'rgba(255,240,200,0)');
@@ -920,28 +1694,29 @@ function drawRocket() {
   // engine bell
   ctx.fillStyle = '#3c4048';
   ctx.beginPath(); ctx.moveTo(-5, 25); ctx.lineTo(5, 25); ctx.lineTo(7, 31); ctx.lineTo(-7, 31); ctx.closePath(); ctx.fill();
-  // body
+  // body (visual only — hitbox stays in bodyPoints(), top at y = -44, under Nick's hair)
   const bg = ctx.createLinearGradient(-7, 0, 7, 0);
   bg.addColorStop(0, '#b9bfc9'); bg.addColorStop(0.35, '#ffffff'); bg.addColorStop(0.7, '#e3e6ec'); bg.addColorStop(1, '#8e95a2');
-  ctx.fillStyle = bg; roundRect(-7, -44, 14, 70, 2.5); ctx.fill();
-  // soot from re-entry
-  const sg = ctx.createLinearGradient(0, -6, 0, 26);
+  ctx.fillStyle = bg; roundRect(-7, VIS_BODY_TOP, 14, 26 - VIS_BODY_TOP, 2.5); ctx.fill();
+  const sg = ctx.createLinearGradient(0, 2, 0, 26);
   sg.addColorStop(0, 'rgba(70,58,50,0)'); sg.addColorStop(1, 'rgba(70,58,50,0.55)');
-  ctx.fillStyle = sg; ctx.fillRect(-7, -6, 14, 32);
-  // panel lines
+  ctx.fillStyle = sg; ctx.fillRect(-7, 2, 14, 24);
   ctx.strokeStyle = 'rgba(80,90,105,0.35)'; ctx.lineWidth = 0.6;
-  for (const yy of [-18, 4]) { ctx.beginPath(); ctx.moveTo(-7, yy); ctx.lineTo(7, yy); ctx.stroke(); }
-  // engine section and interstage
+  for (const yy of [1, 12]) { ctx.beginPath(); ctx.moveTo(-7, yy); ctx.lineTo(7, yy); ctx.stroke(); }
   ctx.fillStyle = '#2b2e35'; ctx.fillRect(-7, 21, 14, 5);
-  ctx.fillStyle = '#23262d'; roundRect(-7, -44, 14, 11, 2.5); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(-4, -44, 2, 11);
-  // grid fins
+  ctx.fillStyle = '#23262d'; ctx.fillRect(-7.4, -16.5, 14.8, 6);
+  ctx.fillStyle = 'rgba(255,255,255,0.16)'; ctx.fillRect(-5.2, -16.5, 2.1, 6);
   ctx.fillStyle = '#3a3e47';
-  ctx.fillRect(-12, -41, 5, 4); ctx.fillRect(7, -41, 5, 4);
+  ctx.fillRect(-12, FIN_Y, 5, 4); ctx.fillRect(7, FIN_Y, 5, 4);
   ctx.strokeStyle = '#6a707c'; ctx.lineWidth = 0.5;
-  for (const gx of [-12, 7]) { ctx.strokeRect(gx, -41, 5, 4); ctx.beginPath(); ctx.moveTo(gx + 2.5, -41); ctx.lineTo(gx + 2.5, -37); ctx.stroke(); }
-  // little accent stripe
-  ctx.fillStyle = '#ff8a4c'; ctx.fillRect(-7, -31, 14, 1.4);
+  for (const gx of [-12, 7]) { ctx.strokeRect(gx, FIN_Y, 5, 4); ctx.beginPath(); ctx.moveTo(gx + 2.5, FIN_Y); ctx.lineTo(gx + 2.5, FIN_Y + 4); ctx.stroke(); }
+  ctx.fillStyle = '#ff8a4c'; ctx.fillRect(-7, 6, 14, 1.6);
+  ctx.save();
+  ctx.translate(0, NICK_Y);
+  drawNickHead(ctx, nickRocketMood(), {
+    t: S.t, salt: 0.4, lookX: face.rLookX, lookY: face.rLookY, stress: face.stress, anchor: 'rocket',
+  });
+  ctx.restore();
   ctx.restore();
   // off-screen indicator
   if (R.y < -10) {
@@ -955,7 +1730,8 @@ function drawRocket() {
 function drawParticles(front) {
   for (const p of particles) {
     const f = p.life / p.max;
-    if (front !== (p.t === 'flame' || p.t === 'fire' || p.t === 'ring')) continue;
+    const frontType = p.t === 'flame' || p.t === 'fire' || p.t === 'ring' || p.t === 'confetti';
+    if (front !== frontType) continue;
     if (p.t === 'flame' || p.t === 'fire') {
       ctx.globalCompositeOperation = 'lighter';
       let c = f > 0.7 ? '255,246,210' : f > 0.45 ? '255,195,80' : f > 0.2 ? '255,120,40' : '170,50,40';
@@ -975,6 +1751,10 @@ function drawParticles(front) {
     } else if (p.t === 'ring') {
       ctx.strokeStyle = `rgba(255,230,190,${(f * 0.8).toFixed(3)})`; ctx.lineWidth = 3 * f + 0.5;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, 7); ctx.stroke();
+    } else if (p.t === 'confetti') {
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot); ctx.globalAlpha = Math.min(1, f * 1.7);
+      ctx.fillStyle = p.c; ctx.fillRect(-p.size * 0.55, -p.size * 0.32, p.size, p.size * 0.64);
+      ctx.restore(); ctx.globalAlpha = 1;
     }
   }
 }
@@ -1175,7 +1955,9 @@ window.RocketLander = {
   state: () => ({ mode: S.mode, level: S.level, total: S.total, best: S.best, reason: S.reason, last: S.last,
                   rocket: R && { x: R.x, y: R.y, vx: R.vx, vy: R.vy, a: R.a, fuel: R.fuel, legs: R.legs, alive: R.alive, landed: R.landed },
                   ship: ship && { x: ship.x, y: ship.y, w: ship.w, vx: ship.vx, vy: ship.vy }, wind,
-                  overlay: overlayButton() ? overlayButton().id : null, keys: { ...keys } }),
+                  overlay: overlayButton() ? overlayButton().id : null, keys: { ...keys },
+                  face: { rocket: nickRocketMood(), ship: nickShipMood(), stress: +face.stress.toFixed(3), duck: +face.duck.toFixed(3) },
+                  portrait: nickPortrait() }),
   start: (level) => { S.level = level || 1; S.total = 0; startLevel(); },
   setRocket: (o) => Object.assign(R, o),
   setStepping: (on) => { S.stepping = !!on; },
