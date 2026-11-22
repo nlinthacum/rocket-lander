@@ -25,6 +25,15 @@
   .primary:disabled{opacity:.55;cursor:default;transform:none}
   .ghost{margin-top:10px;padding:8px 18px;font-size:14px;font-weight:700;color:#ffd38a;background:transparent;border:1px solid rgba(255,211,138,.45);border-radius:999px;cursor:pointer}
   .ghost:hover,.ghost[aria-expanded="true"]{background:rgba(255,211,138,.12)}
+  .actions{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;align-items:center;margin-top:14px}
+  .actions .primary,.actions .ghost{margin-top:0;min-width:132px}
+  .actions .ghost{padding:12px 22px;font-size:16px}
+  #crashKeys{margin-top:10px}
+  #crashKeys kbd{margin:0 2px}
+  @media (max-width:420px){
+    .actions{flex-direction:column;align-items:stretch}
+    .actions .primary,.actions .ghost{width:100%}
+  }
   .best{margin-top:12px;font-size:13px;color:#aab3cf}
   .best b{color:#ffd38a}
   .name-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
@@ -73,7 +82,7 @@
       <span><kbd>↑</kbd><kbd>W</kbd><kbd>Space</kbd></span><span>Fire engine (uses fuel)</span>
       <span><kbd>←</kbd><kbd>→</kbd> <kbd>A</kbd><kbd>D</kbd></span><span>Rotate</span>
     </div>
-    <p class="small">Land slower than 7 m/s, within 10° of upright, with both legs on the deck. Later levels bring less fuel, wind, and rolling seas.</p>
+    <p class="small">Land slower than 7 m/s, within 10° of upright, with both legs on the deck. Later levels bring less fuel, wind, and rolling seas. A crash restarts that level and keeps your score. Quit ends the run.</p>
     <button id="startBtn" class="primary">Start</button>
     <div class="best">High score: <b id="bestStart">0</b></div>
     <button id="lbToggle" class="ghost" type="button" aria-expanded="false" aria-controls="startBoard">Leaderboard</button>
@@ -99,6 +108,11 @@
     </div>
     <p id="rankLine" class="rankline hidden" role="status"></p>
     <div id="resBoard" class="lb hidden"></div>
+    <div id="crashActions" class="actions hidden">
+      <button id="retryBtn" class="primary" type="button">Retry</button>
+      <button id="quitBtn" class="ghost" type="button">Quit</button>
+    </div>
+    <p id="crashKeys" class="small hidden">Score is kept.<br><kbd>Enter</kbd> retries · <kbd>Q</kbd> quits</p>
     <button id="resBtn" class="primary">Next level</button>
     <div class="best" id="resBest"></div>
   </div>
@@ -272,6 +286,11 @@ function endRun(success, reason, info) {
   S.overlayAt = S.t + (success ? 1.1 : 1.7);
   if (success) Snd.chime(); else Snd.boom();
 }
+function setCrashChoices(on) {
+  $('crashActions').classList.toggle('hidden', !on);
+  $('crashKeys').classList.toggle('hidden', !on);
+  $('resBtn').classList.toggle('hidden', on);
+}
 function showResult() {
   S.overlayAt = 0;
   const box = $('resultScreen');
@@ -292,21 +311,45 @@ function showResult() {
     $('resBtn').textContent = `Level ${S.level + 1} →`;
     $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
     hideSubmitUI();
+    setCrashChoices(false);
   } else {
-    const newBest = S.total > 0 && S.total >= S.best;
     $('resTitle').textContent = R.splash ? 'Splashdown 💦' : 'Kaboom! 💥';
     $('resMsg').textContent = S.reason;
-    $('resTable').innerHTML = `<table><tr><td>Reached level</td><td>${S.level}</td></tr><tr class="total"><td>Final score</td><td>${S.total}</td></tr></table>`;
-    $('resBtn').textContent = 'Try again';
-    $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
-    if (S.total > 0 && !scoreSent) setupSubmitForm();
-    else if (!scoreSent) hideSubmitUI();
+    $('resTable').innerHTML = `<table><tr><td>Level</td><td>${S.level}</td></tr><tr class="total"><td>Score</td><td>${S.total}</td></tr></table>`;
+    $('resBest').innerHTML = `High score: <b>${S.best}</b>`;
+    hideSubmitUI();
+    setCrashChoices(true);
   }
   box.classList.remove('hidden');
 }
+function showGameOver() {
+  S.mode = 'gameover';
+  S.overlayAt = 0;
+  const newBest = S.total > 0 && S.total >= S.best;
+  $('resTitle').textContent = R.splash ? 'Splashdown 💦' : 'Kaboom! 💥';
+  $('resMsg').textContent = S.reason;
+  $('resTable').innerHTML = `<table><tr><td>Reached level</td><td>${S.level}</td></tr><tr class="total"><td>Final score</td><td>${S.total}</td></tr></table>`;
+  $('resBtn').textContent = 'Try again';
+  $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
+  setCrashChoices(false);
+  if (S.total > 0 && !scoreSent) setupSubmitForm();
+  else if (!scoreSent) hideSubmitUI();
+  $('resultScreen').classList.remove('hidden');
+}
 $('resBtn').addEventListener('click', () => {
   Snd.unlock();
-  if (S.mode === 'landed') { S.level++; startLevel(); } else newGame();
+  if (S.mode === 'landed') { S.level++; startLevel(); }
+  else if (S.mode === 'gameover') newGame();
+});
+$('retryBtn').addEventListener('click', () => {
+  Snd.unlock();
+  if (S.mode !== 'crashed') return;
+  startLevel();
+});
+$('quitBtn').addEventListener('click', () => {
+  Snd.unlock();
+  if (S.mode !== 'crashed') return;
+  showGameOver();
 });
 $('startBtn').addEventListener('click', () => { Snd.unlock(); newGame(); });
 
@@ -547,7 +590,7 @@ $('scoreForm').addEventListener('submit', async (ev) => {
   ev.preventDefault();
   if (sending || scoreSent) return;
   const pending = pendingSubmit;
-  if (!pending || S.mode !== 'crashed' || pending.serial !== runSerial) return;
+  if (!pending || S.mode !== 'gameover' || pending.serial !== runSerial) return;
   const name = $('nameInput').value;
   const err = nameError(name);
   if (err) {
@@ -756,7 +799,7 @@ function render() {
   if (R && R.alive) drawRocket();
   drawParticles(true);
   drawOceanFront(th);
-  if (S.mode === 'play' || S.mode === 'landed' || S.mode === 'crashed') drawHUD();
+  if (S.mode === 'play' || S.mode === 'landed' || S.mode === 'crashed' || S.mode === 'gameover') drawHUD();
 }
 
 function drawSky(th) {
@@ -1113,7 +1156,10 @@ $('mute').addEventListener('click', e => { Snd.toggle(); e.currentTarget.blur();
 const KEYMAP = { ArrowLeft: 'left', KeyA: 'left', ArrowRight: 'right', KeyD: 'right', ArrowUp: 'up', KeyW: 'up', Space: 'up' };
 function overlayButton() {
   if (!$('startScreen').classList.contains('hidden')) return $('startBtn');
-  if (!$('resultScreen').classList.contains('hidden')) return $('resBtn');
+  if (!$('resultScreen').classList.contains('hidden')) {
+    if (!$('crashActions').classList.contains('hidden')) return $('retryBtn');
+    return $('resBtn');
+  }
   return null;
 }
 function isField(n) {
@@ -1126,6 +1172,12 @@ function typingTarget(e) {
 }
 window.addEventListener('keydown', e => {
   if (typingTarget(e)) return;
+  const crashOpen = !$('resultScreen').classList.contains('hidden') && !$('crashActions').classList.contains('hidden');
+  if (crashOpen && (e.code === 'KeyQ' || e.code === 'Escape')) {
+    e.preventDefault();
+    if (!e.repeat) $('quitBtn').click();
+    return;
+  }
   if (e.target && e.target.tagName === 'BUTTON') return;
   if (e.code === 'KeyM') { Snd.toggle(); return; }
   const btn = overlayButton();
