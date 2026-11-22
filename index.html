@@ -2,16 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover,interactive-widget=resizes-content">
 <meta name="theme-color" content="#1d2b64">
 <title>Rocket Lander</title>
 <style>
   *{box-sizing:border-box}
   html,body{margin:0;height:100%;background:#0b1020;overflow:hidden;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#fff;-webkit-user-select:none;user-select:none;touch-action:none;-webkit-tap-highlight-color:transparent}
   #game{position:absolute;inset:0;width:100%;height:100%;display:block}
-  .overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:16px;background:radial-gradient(ellipse at center,rgba(5,8,25,.25),rgba(5,8,25,.6));z-index:5}
+  .overlay{position:absolute;left:0;right:0;top:var(--vv-top,0px);height:var(--vv-height,100%);display:flex;flex-direction:column;align-items:center;justify-content:flex-start;padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));background:radial-gradient(ellipse at center,rgba(5,8,25,.25),rgba(5,8,25,.6));z-index:5;overflow-x:hidden;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:manipulation;overscroll-behavior:contain}
   .hidden{display:none!important}
-  .card{background:rgba(14,18,40,.82);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:26px 30px 22px;max-width:420px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+  .card{background:rgba(14,18,40,.82);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:26px 30px 22px;max-width:420px;width:100%;margin:auto;flex:0 0 auto;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.45);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
   .kicker{font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:#ffb36b;opacity:.9}
   h1{margin:6px 0 4px;font-size:40px;letter-spacing:.04em;font-weight:800;background:linear-gradient(180deg,#fff 30%,#ffc98a);-webkit-background-clip:text;background-clip:text;color:transparent}
   h2{margin:2px 0 6px;font-size:30px;font-weight:800}
@@ -22,8 +22,30 @@
   button{font-family:inherit}
   .primary{margin-top:14px;padding:12px 34px;font-size:17px;font-weight:700;color:#1b1030;border:0;border-radius:999px;background:linear-gradient(180deg,#ffd38a,#ff8a4c);box-shadow:0 6px 20px rgba(255,138,76,.4);cursor:pointer;transition:transform .08s}
   .primary:hover{transform:translateY(-1px)} .primary:active{transform:translateY(1px)}
+  .primary:disabled{opacity:.55;cursor:default;transform:none}
+  .ghost{margin-top:10px;padding:8px 18px;font-size:14px;font-weight:700;color:#ffd38a;background:transparent;border:1px solid rgba(255,211,138,.45);border-radius:999px;cursor:pointer}
+  .ghost:hover,.ghost[aria-expanded="true"]{background:rgba(255,211,138,.12)}
   .best{margin-top:12px;font-size:13px;color:#aab3cf}
   .best b{color:#ffd38a}
+  .name-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center}
+  .name-row input{flex:1 1 140px;min-width:0;width:100%;font-family:inherit;font-size:16px;line-height:1.2;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.22);background:rgba(6,8,20,.72);color:#fff;-webkit-user-select:text;user-select:text;touch-action:manipulation;scroll-margin:16px}
+  .name-row input::placeholder{color:#8b93b0}
+  .name-row input:focus{outline:2px solid rgba(255,211,138,.85);outline-offset:1px;border-color:transparent}
+  .name-row .primary{flex:0 0 auto;margin-top:0;padding:10px 18px}
+  #submitLead{display:block;margin-top:12px}
+  .hint{margin:8px 0 0;font-size:13px;line-height:1.35;color:#ffb3b3}
+  .rankline{margin:12px 0 0;font-size:16px;font-weight:800;color:#ffd38a}
+  .lb{margin-top:4px;text-align:left}
+  .lb-title{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:#aab3cf;margin:8px 0 2px;text-align:center}
+  .lb table{width:100%;min-width:0;margin-top:2px;table-layout:fixed}
+  .lb th{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#aab3cf;font-weight:600;text-align:left;padding:4px 6px;border-bottom:1px solid rgba(255,255,255,.14)}
+  .lb td{padding:5px 6px;font-size:14px;font-weight:600;color:#d9def0;text-align:left;overflow-wrap:anywhere}
+  .lb th.num,.lb td.num{text-align:right}
+  .lb td.num{color:#fff;font-weight:700}
+  .lb tbody tr+tr td{border-top:1px solid rgba(255,255,255,.06)}
+  .lb tr.me td{background:rgba(255,180,90,.22);color:#ffe7c2}
+  .lb tr.me td.num{color:#ffd38a}
+  .lb col.rank{width:2.4em} .lb col.score{width:5.2em} .lb col.lvl{width:3em}
   table{margin:10px auto 0;border-collapse:collapse;font-size:14px;min-width:240px}
   td{padding:3px 8px;color:#d9def0} td:last-child{text-align:right;font-variant-numeric:tabular-nums;color:#fff;font-weight:600}
   tr.total td{border-top:1px solid rgba(255,255,255,.2);padding-top:7px;font-size:16px;color:#ffd38a}
@@ -35,7 +57,7 @@
   #touch button.thrust{width:96px;height:96px;font-size:15px;letter-spacing:.06em;background:rgba(255,138,76,.35);border-color:rgba(255,200,140,.6)}
   #touch button.on{background:rgba(255,255,255,.35)}
   #touch button.thrust.on{background:rgba(255,160,90,.7)}
-  @media (max-height:520px){ .card{padding:16px 22px} h1{font-size:30px} .keys{margin:8px auto 2px} p{font-size:14px;margin:5px 0} }
+  @media (max-height:520px){ .card{padding:16px 22px} h1{font-size:30px} .keys{margin:8px auto 2px} p{font-size:14px;margin:5px 0} .lb td,.lb th{padding:3px 4px} }
 </style>
 </head>
 <body>
@@ -54,6 +76,9 @@
     <p class="small">Land slower than 7 m/s, within 10° of upright, with both legs on the deck. Later levels bring less fuel, wind, and rolling seas.</p>
     <button id="startBtn" class="primary">Start</button>
     <div class="best">High score: <b id="bestStart">0</b></div>
+    <button id="lbToggle" class="ghost" type="button" aria-expanded="false" aria-controls="startBoard">Leaderboard</button>
+    <p id="startLbMsg" class="small hidden" role="status"></p>
+    <div id="startBoard" class="lb hidden" aria-live="polite"></div>
   </div>
 </div>
 
@@ -62,6 +87,18 @@
     <h2 id="resTitle">Touchdown!</h2>
     <p id="resMsg"></p>
     <div id="resTable"></div>
+    <div id="submitBox" class="hidden">
+      <label for="nameInput" class="small" id="submitLead">Name for the leaderboard</label>
+      <form id="scoreForm" autocomplete="off">
+        <div class="name-row">
+          <input id="nameInput" name="player" type="text" maxlength="16" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="send" autocomplete="off" placeholder="Your name" aria-label="Player name" aria-describedby="submitHint">
+          <button id="submitBtn" class="primary" type="submit">Submit</button>
+        </div>
+      </form>
+      <p id="submitHint" class="hint" role="status"></p>
+    </div>
+    <p id="rankLine" class="rankline hidden" role="status"></p>
+    <div id="resBoard" class="lb hidden"></div>
     <button id="resBtn" class="primary">Next level</button>
     <div class="best" id="resBest"></div>
   </div>
@@ -88,6 +125,8 @@ const LEG_LEN = 28, LEG_PIVOT_Y = 18, LEG_PIVOT_X = 7, LEG_DEPLOY = 35 * Math.PI
 const FOOT_Y = LEG_PIVOT_Y + LEG_LEN * Math.cos(LEG_DEPLOY); // ~40.9
 const DT = 1 / 120;
 const BEST_KEY = 'rocketLanderBest';
+const NAME_KEY = 'rocketLanderName';
+const NAME_RE = /^[A-Za-z0-9 _-]{1,16}$/;
 
 const cv = document.getElementById('game'), ctx = cv.getContext('2d');
 const $ = id => document.getElementById(id);
@@ -100,6 +139,8 @@ const ease = t => t * t * (3 - 2 * t);
 
 function loadBest() { try { return +localStorage.getItem(BEST_KEY) || 0; } catch (e) { return 0; } }
 function saveBest(v) { try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {} }
+function loadName() { try { const v = localStorage.getItem(NAME_KEY) || ''; return NAME_RE.test(v) ? v : ''; } catch (e) { return ''; } }
+function saveName(v) { try { localStorage.setItem(NAME_KEY, v); } catch (e) {} }
 
 const S = { mode: 'start', level: 1, total: 0, best: loadBest(), t: 0, levelT: 0, overlayAt: 0, reason: '', last: null, cfg: null, stepping: true };
 let R = null, ship = null, wind = 0, windBase = 0;
@@ -151,6 +192,17 @@ function resize() {
   if (R && !R.landed && oldSea) R.y += seaY - oldSea;
 }
 window.addEventListener('resize', resize);
+function syncVisualViewport() {
+  const vv = window.visualViewport;
+  if (!vv) return;
+  document.documentElement.style.setProperty('--vv-top', vv.offsetTop + 'px');
+  document.documentElement.style.setProperty('--vv-height', vv.height + 'px');
+}
+syncVisualViewport();
+if (window.visualViewport) {
+  visualViewport.addEventListener('resize', syncVisualViewport);
+  visualViewport.addEventListener('scroll', syncVisualViewport);
+}
 
 // ---------- ship ----------
 function makeShip(c) {
@@ -190,7 +242,14 @@ function setDemo() {
   makeShip(S.cfg); ship.baseX = Math.min(VW * 0.86, VW - ship.w / 2 - 20); placeShip(0, true);
   R = { x: ship.x, y: ship.y - FOOT_Y, vx: 0, vy: 0, a: 0, fuel: 100, fuelMax: 100, legs: 1, thrust: false, alive: true, landed: true, relX: -8 };
 }
-function newGame() { S.level = 1; S.total = 0; startLevel(); }
+function newGame() {
+  runSerial++;
+  scoreSent = false;
+  sending = false;
+  pendingSubmit = null;
+  S.level = 1; S.total = 0;
+  startLevel();
+}
 function startLevel() {
   const c = S.cfg = levelCfg(S.level);
   makeShip(c);
@@ -200,7 +259,10 @@ function startLevel() {
         fuel: c.fuel, fuelMax: c.fuel, legs: 0, thrust: false, alive: true, landed: false, relX: 0 };
   particles.length = 0;
   keys.left = keys.right = keys.up = false;
+  touch.left = touch.right = touch.up = false;
   S.mode = 'play'; S.levelT = 0; S.overlayAt = 0; S.last = null;
+  const ae = document.activeElement;
+  if (ae && $('resultScreen').contains(ae)) ae.blur();
   $('startScreen').classList.add('hidden'); $('resultScreen').classList.add('hidden');
   cv.focus && cv.focus();
 }
@@ -229,6 +291,7 @@ function showResult() {
       <tr><td>Run total</td><td>${S.total}</td></tr></table>`;
     $('resBtn').textContent = `Level ${S.level + 1} →`;
     $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
+    hideSubmitUI();
   } else {
     const newBest = S.total > 0 && S.total >= S.best;
     $('resTitle').textContent = R.splash ? 'Splashdown 💦' : 'Kaboom! 💥';
@@ -236,6 +299,8 @@ function showResult() {
     $('resTable').innerHTML = `<table><tr><td>Reached level</td><td>${S.level}</td></tr><tr class="total"><td>Final score</td><td>${S.total}</td></tr></table>`;
     $('resBtn').textContent = 'Try again';
     $('resBest').innerHTML = newBest ? '<b>New high score!</b>' : `High score: <b>${S.best}</b>`;
+    if (S.total > 0 && !scoreSent) setupSubmitForm();
+    else if (!scoreSent) hideSubmitUI();
   }
   box.classList.remove('hidden');
 }
@@ -244,6 +309,306 @@ $('resBtn').addEventListener('click', () => {
   if (S.mode === 'landed') { S.level++; startLevel(); } else newGame();
 });
 $('startBtn').addEventListener('click', () => { Snd.unlock(); newGame(); });
+
+// ---------- leaderboard (Supabase REST, no client library) ----------
+const LB_URL = 'https://gaicrmfyjcwkrjlnedsm.supabase.co';
+const LB_PUBLISHABLE = 'sb_publishable_FzvhAlOVhLfA9itKswvzog_kEa7M8oT';
+const LB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdhaWNybWZ5amN3a3JqbG5lZHNtIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTUzMTAwNzUsImV4cCI6MjExMDg4NjA3NX0.2ZG04I7ZxdGSSdY8skXUDNLVKxfxn574uczjdV_inOM';
+const LB_TIMEOUT = 8000;
+const GAME_ID = 'rocket-lander';
+let lbUseAnon = false;
+let lbCache = null;
+let boardSeq = 0;
+let runSerial = 0;
+let scoreSent = false;
+let sending = false;
+let pendingSubmit = null;
+
+function nameError(name) {
+  if (!name) return 'Enter a name.';
+  if (name.length > 16) return 'Name must be 16 characters or fewer.';
+  if (!NAME_RE.test(name)) return 'Use only letters, numbers, spaces, _ or -.';
+  return '';
+}
+function setStatus(el, text) {
+  el.textContent = text || '';
+  el.classList.toggle('hidden', !text);
+}
+function serverMessage(data) {
+  const m = data && typeof data.message === 'string' ? data.message.trim() : '';
+  if (!m || m.length > 200) return '';
+  return m.charAt(0).toUpperCase() + m.slice(1);
+}
+function errorText(e) {
+  if (e && e.name === 'AbortError') return 'The leaderboard timed out. You can keep playing.';
+  if (e && e.serverMessage) return e.serverMessage;
+  return 'Couldn\'t reach the leaderboard. You can keep playing.';
+}
+function hideSubmitUI() {
+  const ae = document.activeElement;
+  if (ae && $('submitBox').contains(ae)) ae.blur();
+  $('submitBox').classList.add('hidden');
+  $('rankLine').classList.add('hidden');
+  $('rankLine').textContent = '';
+  $('resBoard').classList.add('hidden');
+  $('resBoard').replaceChildren();
+  setStatus($('submitHint'), '');
+  $('nameInput').setAttribute('aria-invalid', 'false');
+}
+function setupSubmitForm() {
+  pendingSubmit = { score: Math.round(Number(S.total)) || 0, level: S.level | 0, serial: runSerial };
+  $('submitBox').classList.remove('hidden');
+  $('rankLine').classList.add('hidden');
+  $('rankLine').textContent = '';
+  $('resBoard').classList.add('hidden');
+  $('resBoard').replaceChildren();
+  $('nameInput').disabled = false;
+  $('nameInput').value = loadName();
+  $('submitBtn').disabled = false;
+  $('submitBtn').textContent = 'Submit';
+  setStatus($('submitHint'), '');
+  $('nameInput').setAttribute('aria-invalid', 'false');
+}
+function releaseControls() {
+  keys.left = keys.right = keys.up = false;
+  touch.left = touch.right = touch.up = false;
+}
+async function lbRpc(fn, body) {
+  const call = async (useAnon) => {
+    const key = useAnon ? LB_ANON : LB_PUBLISHABLE;
+    const headers = { 'Content-Type': 'application/json', Accept: 'application/json', apikey: key };
+    if (useAnon) headers.Authorization = 'Bearer ' + key;
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), LB_TIMEOUT);
+    try {
+      const res = await fetch(LB_URL + '/rest/v1/rpc/' + fn, {
+        method: 'POST', headers, body: JSON.stringify(body), signal: ctrl.signal, credentials: 'omit',
+      });
+      const text = await res.text();
+      let data = null;
+      if (text) { try { data = JSON.parse(text); } catch (err) { data = null; } }
+      return { ok: res.ok, status: res.status, data };
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+  if (!lbUseAnon) {
+    const res = await call(false);
+    if (res.status !== 401 && res.status !== 403) return res;
+    lbUseAnon = true;
+  }
+  return call(true);
+}
+function parseRows(data) {
+  if (!Array.isArray(data)) return null;
+  const rows = [];
+  for (const r of data) {
+    if (!r || typeof r !== 'object') continue;
+    const score = Number(r.score), level = Number(r.level);
+    if (!Number.isFinite(score) || !Number.isFinite(level)) continue;
+    rows.push({
+      player_name: typeof r.player_name === 'string' ? r.player_name : '',
+      score, level,
+      created_at: r.created_at == null ? '' : String(r.created_at),
+    });
+    if (rows.length >= 10) break;
+  }
+  return rows;
+}
+function timeValue(s) {
+  const t = Date.parse(s);
+  return Number.isFinite(t) ? t : 0;
+}
+function fillBoard(container, rows, highlight) {
+  container.replaceChildren();
+  if (!rows || !rows.length) return false;
+  const title = document.createElement('div');
+  title.className = 'lb-title';
+  title.textContent = 'Top 10';
+  container.appendChild(title);
+  const table = document.createElement('table');
+  const cols = document.createElement('colgroup');
+  ['rank', 'name', 'score', 'lvl'].forEach(c => {
+    const col = document.createElement('col');
+    if (c !== 'name') col.className = c;
+    cols.appendChild(col);
+  });
+  table.appendChild(cols);
+  const thead = document.createElement('thead');
+  const hr = document.createElement('tr');
+  [['#', false], ['Name', false], ['Score', true], ['Lv', true]].forEach(([label, num]) => {
+    const th = document.createElement('th');
+    th.scope = 'col';
+    th.textContent = label;
+    if (num) th.className = 'num';
+    hr.appendChild(th);
+  });
+  thead.appendChild(hr);
+  table.appendChild(thead);
+  const tb = document.createElement('tbody');
+  let hi = -1;
+  if (highlight && highlight.name) {
+    rows.forEach((r, i) => {
+      if (r.player_name === highlight.name && Number(r.score) === Number(highlight.score)) {
+        if (hi < 0 || timeValue(r.created_at) >= timeValue(rows[hi].created_at)) hi = i;
+      }
+    });
+  }
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    if (i === hi) tr.className = 'me';
+    [[String(i + 1), true], [r.player_name, false], [String(r.score), true], [String(r.level), true]].forEach(([text, num]) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      if (num) td.className = 'num';
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  table.appendChild(tb);
+  container.appendChild(table);
+  return hi >= 0;
+}
+async function loadBoard() {
+  const seq = ++boardSeq;
+  let res;
+  try { res = await lbRpc('top_scores', { p_game: GAME_ID, p_limit: 10 }); }
+  catch (e) { if (seq !== boardSeq) return null; throw e; }
+  if (seq !== boardSeq) return null;
+  if (!res.ok) {
+    const err = new Error('leaderboard');
+    err.status = res.status;
+    err.serverMessage = (res.status >= 400 && res.status < 500 && res.status !== 401 && res.status !== 403) ? serverMessage(res.data) : '';
+    throw err;
+  }
+  const rows = parseRows(res.data);
+  if (!rows) {
+    const err = new Error('leaderboard');
+    err.status = res.status;
+    throw err;
+  }
+  lbCache = rows;
+  return rows;
+}
+function responseError(res) {
+  if (res.status === 401 || res.status === 403) return 'The leaderboard is unavailable. You can keep playing.';
+  const m = serverMessage(res.data);
+  if (m && res.status >= 400 && res.status < 500) return m;
+  return 'The leaderboard is unavailable. You can keep playing.';
+}
+async function showStartBoard() {
+  const box = $('startBoard'), msg = $('startLbMsg');
+  box.classList.remove('hidden');
+  $('lbToggle').setAttribute('aria-expanded', 'true');
+  $('lbToggle').textContent = 'Hide leaderboard';
+  if (lbCache) {
+    fillBoard(box, lbCache, null);
+    setStatus(msg, lbCache.length ? '' : 'No scores yet. Be the first.');
+  } else setStatus(msg, 'Loading leaderboard…');
+  try {
+    const rows = await loadBoard();
+    if (!rows || box.classList.contains('hidden')) return;
+    fillBoard(box, rows, null);
+    setStatus(msg, rows.length ? '' : 'No scores yet. Be the first.');
+  } catch (e) {
+    if (box.classList.contains('hidden') || lbCache) return;
+    box.replaceChildren();
+    setStatus(msg, errorText(e));
+  }
+}
+function closeStartBoard() {
+  $('startBoard').classList.add('hidden');
+  setStatus($('startLbMsg'), '');
+  $('lbToggle').setAttribute('aria-expanded', 'false');
+  $('lbToggle').textContent = 'Leaderboard';
+}
+$('lbToggle').addEventListener('click', () => {
+  if ($('startBoard').classList.contains('hidden')) showStartBoard();
+  else closeStartBoard();
+});
+function parseRank(data) {
+  const n = typeof data === 'number' ? data : (typeof data === 'string' ? Number(data) : NaN);
+  return Number.isInteger(n) && n >= 1 && n <= 1000000 ? n : null;
+}
+$('nameInput').addEventListener('focus', () => {
+  releaseControls();
+  const nudge = () => { try { $('nameInput').scrollIntoView({ block: 'center', inline: 'nearest' }); } catch (err) {} };
+  setTimeout(nudge, 50);
+  setTimeout(nudge, 350);
+});
+$('nameInput').addEventListener('input', () => {
+  const v = $('nameInput').value;
+  const err = v ? nameError(v) : '';
+  setStatus($('submitHint'), err);
+  $('nameInput').setAttribute('aria-invalid', err ? 'true' : 'false');
+  if (v && !err) saveName(v);
+});
+$('scoreForm').addEventListener('submit', async (ev) => {
+  ev.preventDefault();
+  if (sending || scoreSent) return;
+  const pending = pendingSubmit;
+  if (!pending || S.mode !== 'crashed' || pending.serial !== runSerial) return;
+  const name = $('nameInput').value;
+  const err = nameError(name);
+  if (err) {
+    setStatus($('submitHint'), err);
+    $('nameInput').setAttribute('aria-invalid', 'true');
+    $('nameInput').focus();
+    return;
+  }
+  if (pending.score < 1 || pending.score > 200000 || pending.level < 0 || pending.level > 999) {
+    setStatus($('submitHint'), 'That score can\'t be submitted.');
+    return;
+  }
+  saveName(name);
+  sending = true;
+  const serial = pending.serial;
+  $('nameInput').disabled = true;
+  $('submitBtn').disabled = true;
+  $('submitBtn').textContent = 'Sending…';
+  setStatus($('submitHint'), '');
+  try {
+    const res = await lbRpc('submit_score', {
+      p_game: GAME_ID, p_name: name, p_score: pending.score, p_level: pending.level,
+    });
+    if (serial !== runSerial) return;
+    if (!res.ok) {
+      setStatus($('submitHint'), responseError(res));
+      $('nameInput').disabled = false;
+      $('submitBtn').disabled = false;
+      $('submitBtn').textContent = 'Submit';
+      $('nameInput').focus();
+      return;
+    }
+    scoreSent = true;
+    const rank = parseRank(res.data);
+    if (document.activeElement === $('nameInput') || document.activeElement === $('submitBtn')) $('submitBtn').blur();
+    $('submitBox').classList.add('hidden');
+    $('rankLine').classList.remove('hidden');
+    $('rankLine').textContent = rank ? 'You ranked #' + rank : 'Score submitted.';
+    let rows = null;
+    try { rows = await loadBoard(); } catch (err) { rows = null; }
+    if (serial !== runSerial) return;
+    if (rows) {
+      $('resBoard').classList.remove('hidden');
+      fillBoard($('resBoard'), rows, { name, score: pending.score });
+      const me = $('resBoard').querySelector('tr.me');
+      if (me) { try { me.scrollIntoView({ block: 'nearest' }); } catch (e) {} }
+    } else if (rank) {
+      $('rankLine').textContent = 'You ranked #' + rank + '. The top 10 couldn\'t be loaded.';
+    } else {
+      $('rankLine').textContent = 'Score submitted. The top 10 couldn\'t be loaded.';
+    }
+  } catch (e) {
+    if (serial !== runSerial) return;
+    setStatus($('submitHint'), errorText(e));
+    $('nameInput').disabled = false;
+    $('submitBtn').disabled = false;
+    $('submitBtn').textContent = 'Submit';
+  } finally {
+    sending = false;
+  }
+});
 
 // ---------- simulation ----------
 function step(dt) {
@@ -657,17 +1022,26 @@ function drawHUD() {
     ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.75)'; ctx.fillText(r[0], rx + 12, yy);
     ctx.font = '700 14px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace'; ctx.textAlign = 'right'; ctx.fillStyle = i === 2 ? '#ffd38a' : txt; ctx.fillText(r[1], rx + rw - 12, yy);
   });
-  // wind
+  // wind (drop below the corner readouts when the screen is too narrow to share the top row)
   if (Math.abs(wind) > 0.5) {
-    const cx = VW / 2, cy = 26, ws = wind / PX_PER_M;
-    hudPanel(cx - 62, 12, 124, 28);
-    ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.8)'; ctx.fillText('WIND', cx - 52, cy);
-    const len = clamp(Math.abs(ws) * 6, 8, 34), dir = Math.sign(ws);
-    const ax0 = cx + 18 - dir * len / 2, ax1 = cx + 18 + dir * len / 2;
+    const ws = wind / PX_PER_M, ww = 124, wh = 28;
+    let wx = VW / 2 - ww / 2, wy = 12;
+    const leftEdge = 12 + 178, rightEdge = VW - 132 - 12;
+    if (wx < leftEdge + 8 || wx + ww > rightEdge - 8) {
+      const rightBottom = 12 + 52 / scale + 70;
+      wy = Math.max(12 + 128, rightBottom) + 8;
+      wx = clamp(VW / 2 - ww / 2, 12, VW - ww - 12);
+    }
+    const cy = wy + wh / 2;
+    hudPanel(wx, wy, ww, wh);
+    ctx.font = '600 11px system-ui,sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(200,210,240,0.8)'; ctx.fillText('WIND', wx + 10, cy);
+    const len = clamp(Math.abs(ws) * 6, 8, 34), dir = Math.sign(ws) || 1;
+    const mid = wx + 80;
+    const ax0 = mid - dir * len / 2, ax1 = mid + dir * len / 2;
     ctx.strokeStyle = '#9fd3ff'; ctx.fillStyle = '#9fd3ff'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(ax0, cy); ctx.lineTo(ax1, cy); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(ax1 + dir * 5, cy); ctx.lineTo(ax1 - dir * 2, cy - 5); ctx.lineTo(ax1 - dir * 2, cy + 5); ctx.fill();
-    ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillText(Math.abs(ws).toFixed(1), cx + 58, cy);
+    ctx.font = '600 10px system-ui,sans-serif'; ctx.textAlign = 'right'; ctx.fillText(Math.abs(ws).toFixed(1), wx + ww - 8, cy);
   }
   // level banner
   if (S.mode === 'play' && S.levelT < 2.6) {
@@ -742,14 +1116,30 @@ function overlayButton() {
   if (!$('resultScreen').classList.contains('hidden')) return $('resBtn');
   return null;
 }
+function isField(n) {
+  if (!n || !n.tagName) return false;
+  const tag = n.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || n.isContentEditable;
+}
+function typingTarget(e) {
+  return isField(e.target) || isField(document.activeElement);
+}
 window.addEventListener('keydown', e => {
+  if (typingTarget(e)) return;
+  if (e.target && e.target.tagName === 'BUTTON') return;
   if (e.code === 'KeyM') { Snd.toggle(); return; }
   const btn = overlayButton();
   if (btn && (e.code === 'Enter' || e.code === 'Space')) { e.preventDefault(); if (!e.repeat) btn.click(); return; }
   const k = KEYMAP[e.code];
   if (k) { e.preventDefault(); if (!e.repeat || keys[k]) keys[k] = true; }
 });
-window.addEventListener('keyup', e => { const k = KEYMAP[e.code]; if (k) { keys[k] = false; e.preventDefault(); } });
+window.addEventListener('keyup', e => {
+  const k = KEYMAP[e.code];
+  if (!k) return;
+  keys[k] = false;
+  if (typingTarget(e)) return;
+  e.preventDefault();
+});
 window.addEventListener('blur', () => { keys.left = keys.right = keys.up = false; touch.left = touch.right = touch.up = false; });
 
 function showTouch() { $('touch').classList.remove('hidden'); if (!touchMode) { touchMode = true; resize(); } }
@@ -774,8 +1164,10 @@ function frame(now) {
 }
 
 resize();
+syncVisualViewport();
 setDemo();
 $('bestStart').textContent = S.best;
+loadBoard().catch(() => {});
 requestAnimationFrame(frame);
 
 // ---------- tiny debug/test hook (harmless; used by automated tests) ----------
