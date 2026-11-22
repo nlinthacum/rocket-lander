@@ -16,12 +16,13 @@ A tiny Lunar Lander-style browser game: bring a reusable rocket booster down ont
 |---|---|---|
 | Fire main engine (uses fuel) | `↑`, `W`, or `Space` | **THRUST** button |
 | Rotate left / right | `←` / `→` or `A` / `D` | ◀ / ▶ buttons |
-| Start / next level / retry | `Enter` or `Space` | tap the button |
+| Start, next level, or retry | `Enter` or `Space` | tap the button |
+| Quit and end the run | `Q` or `Esc` | tap **Quit** |
 | Sound on/off (off by default) | `M` | 🔇 button (top right) |
 
-**Landing rules.** Touch down with both legs on the deck, slower than **7.2 m/s** vertically and **4.8 m/s** sideways, and within **10°** of upright. The HUD values turn green when they're inside the limits. Anything else, or missing the ship, ends in an explosion or a splash.
+**Landing rules.** Touch down with both legs on the deck, slower than **7.2 m/s** vertically and **4.8 m/s** sideways, and within **10°** of upright. The HUD values turn green when they're inside the limits. Anything else, or missing the ship, is a crash: an explosion or a splash. The level starts over, with that level's fuel and difficulty. Quit when you want the run to end.
 
-**Score** = accuracy (distance from the deck center, up to 400) + softness (up to 250) + uprightness (up to 100) + fuel left (up to 250). That sum is multiplied by a level bonus (+25% per level). Scores add up across levels until you crash. The best run total is saved in your browser (`localStorage`). Finished runs can also be submitted to the shared leaderboard below.
+**Score** = accuracy (distance from the deck center, up to 400) + softness (up to 250) + uprightness (up to 100) + fuel left (up to 250). That sum is multiplied by a level bonus (+25% per level). Scores from levels you have cleared add up. A crash adds nothing and does not wipe that total. The best run total is saved in your browser (`localStorage`). When you quit, that total can be submitted to the shared leaderboard below.
 
 **Levels get harder:**
 - Level 2 adds wind and rolling seas (the ship bobs), with less fuel and a smaller deck.
@@ -31,7 +32,7 @@ The sky also goes from sunset to dusk to night.
 
 ## Global leaderboard
 
-Crash with a score above zero and you can put that run on a shared board. Type a name — 1 to 16 characters, using letters, numbers, spaces, `_`, or `-` — and submit. The panel then shows your rank and the top 10, with your row highlighted when it made the list. The same top 10 is on the start screen, under **Leaderboard**.
+Quit a run with a score above zero and you can put that run on a shared board. Type a name — 1 to 16 characters, using letters, numbers, spaces, `_`, or `-` — and submit. The panel then shows your rank and the top 10, with your row highlighted when it made the list. The same top 10 is on the start screen, under **Leaderboard**.
 
 While the name box is focused, those keys type instead of flying the rocket. Enter submits. Each run can be submitted once. Your on-device best score is unchanged.
 
